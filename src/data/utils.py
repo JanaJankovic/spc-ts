@@ -164,24 +164,23 @@ def build_periodic_sequences(df_all, timestamps, n, freq, horizon):
     return np.array(X_per)
 
 
-def smooth_and_clean_target(df, lookback, freq="1h", target_col="vrednost"):
-    df = df.set_index("ts").rename(columns={target_col: "cntr"})
-    df.rename_axis("Date_Time", inplace=True)
+def smooth_and_clean_target(
+    df, lookback, freq="1h", target_col="load", time_col="datetime"
+):
+    df[time_col] = pd.to_datetime(df[time_col])
+    df = df.set_index(time_col).rename(columns={target_col: "cntr"})
 
-    # Resample and round
     df = df.resample(freq.lower()).sum().reset_index()
     df["cntr"] = df["cntr"].round(2)
-
-    # Smooth with rolling mean (backward fill for early NaNs)
     df["SMA"] = df["cntr"].rolling(window=lookback).mean().bfill()
 
-    # IQR outlier smoothing
     Q1, Q3 = df["cntr"].quantile([0.25, 0.75])
     IQR = Q3 - Q1
     outliers = (df["cntr"] < (Q1 - 1.5 * IQR)) | (df["cntr"] > (Q3 + 1.5 * IQR))
     average_max = df["cntr"].nlargest(lookback).mean()
     df.loc[outliers, "cntr"] = average_max
 
+    df = df.rename(columns={"cntr": target_col})
     return df
 
 

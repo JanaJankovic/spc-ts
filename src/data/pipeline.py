@@ -108,20 +108,20 @@ def base_residual_pipeline(
     horizon,
     batch,
     time_col="datetime",
-    target_col="vrednost",
+    target_col="load",
     freq="1h",
     use_calendar=True,
     use_weather=True,
 ):
     df = pd.read_csv(load_path)
-    df = utils.smooth_and_clean_target(df, lookback, freq, target_col)
+    df = utils.smooth_and_clean_target(df, lookback, freq, target_col, time_col)
 
     if use_calendar:
         holidays = pd.read_csv(HOLIDAYS_PATH)
         df = utils.add_time_features(
             df,
             time_col,
-            holidays[["holiday"]].values,
+            holidays["holiday"],
             include_hour_features=(freq == "1h"),
         )
 
