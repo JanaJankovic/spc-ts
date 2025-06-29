@@ -12,10 +12,19 @@ import torch
 import torch.nn as nn
 import os
 import pandas as pd
-import time
 from datetime import datetime
 from scipy.stats import spearmanr, ConstantInputWarning
 import warnings
+import csv
+import json
+
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+
+LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+LOSS_LOG = os.path.join(LOG_DIR, "training_loss.csv")
+METRIC_LOG = os.path.join(LOG_DIR, "training_metrics.csv")
+TRIAL_LOG = os.path.join(LOG_DIR, "trial_info.csv")
 
 
 class RMSELoss(nn.Module):
@@ -62,35 +71,57 @@ def calculate_metrics(y_true, y_pred, elapsed_time, type="test"):
     }
 
 
-def log_training_loss(log_path, epoch, train_loss, val_loss, start_time, end_time):
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+def log_trial_info(model_name: str, model_type: str, trial: int, params: dict):
+    os.makedirs(os.path.dirname(TRIAL_LOG), exist_ok=True)
 
+    entry = {
+        "model_name": model_name,
+        "model_type": model_type,
+        "trial": trial,
+        "params": json.dumps(params, sort_keys=True),
+    }
+
+    df = pd.DataFrame([entry])
+    df.to_csv(TRIAL_LOG, mode="a", index=False, header=not os.path.exists(TRIAL_LOG))
+
+
+def log_training_loss(epoch, train_loss, val_loss, start_time, end_time, model_name):
     start_dt = datetime.fromtimestamp(start_time)
     end_dt = datetime.fromtimestamp(end_time)
 
     entry = {
+        "model": model_name,
+        "epoch": epoch + 1,
         "start_epoch_time": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "end_epoch_time": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
-        "epoch": epoch + 1,
         "train_loss": train_loss,
         "val_loss": val_loss,
     }
 
     pd.DataFrame([entry]).to_csv(
-        log_path, mode="a", index=False, header=not os.path.exists(log_path)
+        LOSS_LOG, mode="a", index=False, header=not os.path.exists(LOSS_LOG)
     )
 
 
 def log_evaluation_metrics(
-    log_path, epoch, y_true, y_pred, scaler, eval_type, elapsed_time, metric_fn
+    epoch,
+    y_true,
+    y_pred,
+    scaler,
+    eval_type,
+    elapsed_time,
+    model_name,
 ):
     y_true = scaler.inverse_transform(y_true)
     y_pred = scaler.inverse_transform(y_pred)
-    metrics = metric_fn(y_true, y_pred, elapsed_time, type=eval_type)
+
+    metrics = calculate_metrics(y_true, y_pred, elapsed_time, type=eval_type)
     metrics["epoch"] = epoch + 1
     metrics["type"] = eval_type
+    metrics["model"] = model_name
 
     column_order = [
+        "model",
         "epoch",
         "type",
         "inference",
@@ -105,5 +136,39 @@ def log_evaluation_metrics(
     metrics_ordered = {key: metrics[key] for key in column_order}
 
     pd.DataFrame([metrics_ordered]).to_csv(
-        log_path, mode="a", index=False, header=not os.path.exists(log_path)
+        METRIC_LOG, mode="a", index=False, header=not os.path.exists(METRIC_LOG)
     )
+
+
+def create_logs_files():
+    with open(LOSS_LOG, "w", newline="") as f:
+        csv.writer(f).writerow(
+            [
+                "model",
+                "epoch",
+                "start_epoch_time",
+                "end_epoch_time",
+                "train_loss",
+                "val_loss",
+            ]
+        )
+
+    with open(METRIC_LOG, "w", newline="") as f:
+        csv.writer(f).writerow(
+            [
+                "model",
+                "epoch",
+                "type",
+                "inference",
+                "MAE",
+                "MSE",
+                "RMSE",
+                "MAPE",
+                "R2",
+                "MDA",
+                "Spearman",
+            ]
+        )
+
+    with open(TRIAL_LOG, "w", newline="") as f:
+        csv.writer(f).writerow(["model_name", "model_type", "trial", "params"])

@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import numpy as np
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
@@ -23,16 +24,15 @@ def get_parameters(model_name):
             parameters[key] = random.choice(model_space[key])
 
     # Handle CNN channels
-    if "cnn_channel" in model_space:
-        if model_name == "base_residual":
-            # base_residual can have multiple CNN layers
-            cnn_size = random.choice(model_space.get("cnn_size", [1]))
-            parameters["cnn_channels"] = random.choices(
-                model_space["cnn_channel"], k=cnn_size
-            )
-        elif model_name == "cnn_di_rnn":
-            # cnn_di_rnn only expects a single value
-            parameters["cnn_channels"] = random.choice(model_space["cnn_channel"])
+    if model_name == "base_residual" and "cnn_channel" in model_space:
+        cnn_size = random.choice(model_space.get("cnn_size", [1]))
+        parameters["cnn_channels"] = random.choices(
+            model_space["cnn_channel"], k=cnn_size
+        )
+
+    elif model_name in ["cnn_di_rnn", "cnn_lstm"] and "cnn_channel" in model_space:
+        # Ensure cnn_channels is always a list
+        parameters["cnn_channels"] = [random.choice(model_space["cnn_channel"])]
 
     # Handle neurons and per-model assignments
     if "neurons" in model_space:
@@ -64,3 +64,28 @@ def get_parameters(model_name):
             parameters["dropout_fc"] = random.choice(model_space["dropout"])
 
     return parameters
+
+
+def calculate_aunl(losses, val_losses):
+    # Ensure inputs are numpy arrays
+    losses = np.array(losses)
+    val_losses = np.array(val_losses)
+
+    # Number of points
+    n = len(losses)
+
+    if n <= 1:
+        return 1, 1
+
+    # Min-Max scaling of losses and val_losses
+    losses_scaled = (losses - np.min(losses)) / (np.max(losses) - np.min(losses))
+    val_losses_scaled = (val_losses - np.min(val_losses)) / (
+        np.max(val_losses) - np.min(val_losses)
+    )
+
+    # Calculate AUNL using trapezoidal rule
+    h = 1 / (n - 1)  # Uniform step size (normalized over the range [a, b])
+    aunl = np.sum((losses_scaled[:-1] + losses_scaled[1:]) / 2) * h
+    aunl_val = np.sum((val_losses_scaled[:-1] + val_losses_scaled[1:]) / 2) * h
+
+    return aunl, aunl_val
