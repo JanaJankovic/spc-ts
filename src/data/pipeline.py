@@ -67,39 +67,30 @@ def cnn_lstm_pipeline(
     )
 
 
-def di_rnn_pipeline(
-    load_path, lookback, horizon, batch, target_col="load", time_col="datetime"
-):
+def di_rnn_pipeline(load_path, m, n, horizon, target_col="load"):
     df = pd.read_csv(load_path)
-    freq = "1h"
-
-    train_ts, val_ts, test_ts = utils.split_dataframe(df[time_col], SPLIT_RATIO)
 
     scaler, train_df, val_df, test_df = utils.scale_uni_data(
         utils.split_dataframe(df, SPLIT_RATIO)
     )
 
     X_s_train, y_s_train = utils.build_traditional_sequences(
-        train_df, lookback, horizon, target_col
+        train_df, m, horizon, target_col
     )
-    X_s_val, y_s_val = utils.build_traditional_sequences(
-        val_df, lookback, horizon, target_col
-    )
+    X_s_val, y_s_val = utils.build_traditional_sequences(val_df, m, horizon, target_col)
     X_s_test, y_s_test = utils.build_traditional_sequences(
-        test_df, lookback, horizon, target_col
+        test_df, m, horizon, target_col
     )
 
-    X_p_train = utils.build_periodic_sequences(
-        train_df, train_ts, lookback, freq, horizon
-    )
-    X_p_val = utils.build_periodic_sequences(val_df, val_ts, lookback, freq, horizon)
-    X_p_test = utils.build_periodic_sequences(test_df, test_ts, lookback, freq, horizon)
+    X_p_train = utils.build_periodic_sequences(train_df, n, horizon)
+    X_p_val = utils.build_periodic_sequences(val_df, n, horizon)
+    X_p_test = utils.build_periodic_sequences(test_df, n, horizon)
 
-    train_loader = utils.to_loader(X_s_train, X_p_train, y_s_train, batch)
-    val_loader = utils.to_loader(X_s_val, X_p_val, y_s_val, batch)
-    test_loader = utils.to_loader(X_s_test, X_p_test, y_s_test, batch)
+    train_data = (X_s_train, X_p_train, y_s_train)
+    val_data = (X_s_val, X_p_val, y_s_val)
+    test_data = (X_s_test, X_p_test, y_s_test)
 
-    return scaler, train_loader, val_loader, test_loader
+    return scaler, (train_data, val_data, test_data)
 
 
 def base_residual_pipeline(

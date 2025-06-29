@@ -1,0 +1,42 @@
+{
+    "base_residual": {
+        "batch_size": [32, 64, 128, 256],
+        "neurons": [8, 16, 20, 32, 48, 64],
+        "use_lstm": [0, 1],
+        "cnn_size": [1, 2, 3, 4],
+        "cnn_channel": [8, 16, 32],
+        "kernel_size": [2, 4, 6, 8],
+        "dropout": [0.1, 0.2, 0.3],
+        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+    },
+    "cnn_di_rnn": {
+        "cnn_size": [1, 2, 3, 4],
+        "cnn_channel": [8, 16, 32],
+        "kernel_size": [2, 4, 6, 8],
+        "neurons": [8, 16, 20, 32, 48, 64],
+        "batch_size": [32, 64, 128, 256],
+        "dropout": [0.1, 0.2, 0.3],
+        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+    },
+    "di_rnn": {
+        "neurons": [8, 16, 20, 32, 48, 64],
+        "batch_size": [32, 64, 128, 256],
+        "dropout": [0.1, 0.2, 0.3],
+        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+    },
+    "cnn_lstm": {
+        "batch_size": [32, 64, 128, 256],
+        "neurons": [8, 16, 20, 32, 48, 64],
+        "lstm_layers": [1, 2, 3, 4],
+        "cnn_size": [1, 2, 3, 4],
+        "cnn_channel": [8, 16, 32],
+        "kernel_size": [2, 4, 6, 8],
+        "use_maxpool": [0, 1],
+        "dropout": [0.1, 0.2, 0.3],
+        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+    }
+}
