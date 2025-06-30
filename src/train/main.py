@@ -3,6 +3,7 @@ from src.logs.utils import log_trial_info
 from datetime import datetime
 import os
 import torch
+import gc
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
@@ -15,10 +16,12 @@ def train_model(
     param_sampler,
     trials=1,
     epochs=50,
-    early_stopping=False,
-    device='cpu'
+    early_stopping=False
 ):
     os.makedirs(MODELS, exist_ok=True)
+    gc.collect()
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()  # optional
 
     pipeline, tracker = get_training_pipeline(model_type)
     tracker = tracker if early_stopping else None
@@ -27,10 +30,10 @@ def train_model(
         print(f"\n🔁 Trial {trial+1}/{trials}")
         params = param_sampler()
 
-        date_str = datetime.now().strftime("%d%m%Y")
+        date_str = datetime.now().strftime("%Y%m%d%H%M%S")
         model_name = f"{date_str}_t{trial+1}_{model_type}.pt"
 
-        log_trial_info(model_name, model_type, trial, params)
+        log_trial_info(model_name, model_type, trial, data_config['load_path'], params)
 
         pipeline(
             model_name=model_name,
@@ -39,7 +42,6 @@ def train_model(
             model_fn=model_fn,
             data_config=data_config,
             params=params,
-            device=device,
             epochs=epochs,
             tracker=tracker
         )

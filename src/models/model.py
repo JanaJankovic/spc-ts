@@ -52,11 +52,13 @@ def get_cnn_lstm(data_config, parameters):
         dropout_conv=parameters["dropout_cnn"],
         dropout_fc=parameters["dropout_fc"],
     )
+    model.to(data_config['device'])
 
     optimizer = get_optimizer(
         parameters["optimizer"], model.parameters(), parameters["learning_rate"]
     )
     criterion = nn.L1Loss()
+    
 
     return scalers, data, model, optimizer, criterion
 
@@ -95,6 +97,8 @@ def get_base_residual(data_config, parameters):
         output_dim=data_config["horizon"],
         dropout=parameters["dropout_cnn"],
     )
+    base_model.to(data_config['device'])
+    residual_model.to(data_config['device'])
 
     base_optimizer = get_optimizer(
         parameters["optimizer"], base_model.parameters(), parameters["learning_rate"]
@@ -105,6 +109,7 @@ def get_base_residual(data_config, parameters):
         parameters["learning_rate"],
     )
     criterion = nn.L1Loss()
+
 
     return (
         scalers,
@@ -132,6 +137,7 @@ def get_di_rnn(data_config, parameters):
         dropout=parameters["dropout_rnn"],
         horizon=data_config["horizon"],
     )
+    model.to(data_config['device'])
 
     optimizers = {
         "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),
@@ -140,6 +146,7 @@ def get_di_rnn(data_config, parameters):
     }
 
     criterion = nn.L1Loss()
+
 
     return scaler, data, model, optimizers, criterion
 
@@ -167,6 +174,7 @@ def get_cnn_di_rnn(data_config, parameters):
         cnn_out_channels=parameters["cnn_channels"],
         kernel_size=parameters["kernel_size"],
     )
+    model.to(data_config['device'])
 
     optimizers = {
         "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),

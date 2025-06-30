@@ -85,24 +85,30 @@ def calculate_aunl(losses, val_losses):
     losses = np.array(losses)
     val_losses = np.array(val_losses)
 
-    # Number of points
     n = len(losses)
-
     if n <= 1:
-        return 1, 1
+        return 1.0, 1.0
 
-    # Min-Max scaling of losses and val_losses
-    losses_scaled = (losses - np.min(losses)) / (np.max(losses) - np.min(losses))
-    val_losses_scaled = (val_losses - np.min(val_losses)) / (
-        np.max(val_losses) - np.min(val_losses)
-    )
+    # AUNL for training loss
+    if np.all(losses == losses[0]):
+        aunl = 1.0
+    else:
+        losses_min, losses_max = np.min(losses), np.max(losses)
+        losses_scaled = (losses - losses_min) / (losses_max - losses_min)
+        h = 1 / (n - 1)
+        aunl = np.sum((losses_scaled[:-1] + losses_scaled[1:]) / 2) * h
 
-    # Calculate AUNL using trapezoidal rule
-    h = 1 / (n - 1)  # Uniform step size (normalized over the range [a, b])
-    aunl = np.sum((losses_scaled[:-1] + losses_scaled[1:]) / 2) * h
-    aunl_val = np.sum((val_losses_scaled[:-1] + val_losses_scaled[1:]) / 2) * h
+    # AUNL for validation loss
+    if np.all(val_losses == val_losses[0]):
+        aunl_val = 1.0
+    else:
+        val_min, val_max = np.min(val_losses), np.max(val_losses)
+        val_losses_scaled = (val_losses - val_min) / (val_max - val_min)
+        h = 1 / (n - 1)
+        aunl_val = np.sum((val_losses_scaled[:-1] + val_losses_scaled[1:]) / 2) * h
 
     return aunl, aunl_val
+
 
 
 class RMSELoss(nn.Module):

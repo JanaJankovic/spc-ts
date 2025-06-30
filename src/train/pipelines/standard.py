@@ -3,11 +3,11 @@ import os
 import time
 import src.logs.utils as log
 from src.train.utils import calculate_aunl
+from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
 
-GLOBAL_PATIENCE = 10
 
 def forward_batch(model, batch, device):
     x, y = batch
@@ -75,8 +75,10 @@ def evaluate_model(model, val_loader, criterion, device):
 
 
 def standard_train_pipeline(
-    model_name, model_type, model_component, model_fn, data_config, params, epochs, device, tracker=None,
+    model_name, model_type, model_component, model_fn, data_config, params, epochs, tracker=None,
 ):
+    
+    device = data_config['device']
     early_stopping = True if tracker else False
     global GLOBAL_PATIENCE
 
@@ -87,7 +89,6 @@ def standard_train_pipeline(
     optimizer = optimizer if not isinstance(optimizer, tuple) else optimizer[0]
 
     target_scaler = scaler["target"] if isinstance(scaler, dict) else scaler
-    model.to(device)
 
     train_losses, val_losses = [], []
     patience_counter = 0
@@ -161,12 +162,13 @@ def standard_train_pipeline(
                 print(
                     f"⚠️ AUNL {aunl_val:.4f} > best {tracker.get_score(model_type):.4f} ({patience_counter}/{GLOBAL_PATIENCE})"
                 )
-
                 if patience_counter >= GLOBAL_PATIENCE:
-                    print(
+                    if epoch > MIN_EPOCHS:
+                        print(
                         f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs."
-                    )
-                    break
+                        )
+                        print(f"⏹️ Stopping training at epoch {epoch+1}.")
+                        break
 
     sts = time.time()
     _, test_preds, test_targets = evaluate_model(

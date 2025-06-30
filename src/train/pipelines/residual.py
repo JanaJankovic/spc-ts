@@ -5,11 +5,11 @@ from src.logs.utils import log_training_loss, log_evaluation_metrics, log_eval_d
 from src.train.utils import RMSELoss
 from src.train.pipelines.standard import standard_train_pipeline
 import os
-
+from src.train.utils import calculate_aunl
+from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
-
 
 def compute_residual_dataset(model, data_loader, scaler, device):
     model.eval()
@@ -28,9 +28,12 @@ def compute_residual_dataset(model, data_loader, scaler, device):
     return TensorDataset(torch.cat(all_inputs), torch.cat(all_residuals))
 
 
-def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epochs, device, model_name, val_loader, scaler):
+def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epochs, device, model_name, val_loader, scaler, tracker, model_type="residual"):
     train_loader = DataLoader(residual_dataset, batch_size=batch_size)
     criterion = RMSELoss()
+    early_stopping = True if tracker else False
+    train_losses, val_losses = [], []
+    patience_counter = 0
 
     for epoch in range(epochs):
         start_time = time.time()
@@ -52,9 +55,11 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
             # Save for logging
             y_pred_train.append(pred.detach().cpu())
             y_true_train.append(r.detach().cpu())
+
         end_train = time.time()
 
         avg_train_loss = total_train_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
         y_pred_train = torch.cat(y_pred_train).numpy()
         y_true_train = torch.cat(y_true_train).numpy()
 
@@ -86,16 +91,16 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
                 val_loss = criterion(combined, y_val)
                 total_val_loss += val_loss.item()
 
-
         end_val = time.time()
 
         avg_val_loss = total_val_loss / len(val_loader)
+        val_losses.append(avg_val_loss)
         y_pred_val = torch.cat(y_pred_val).numpy()
         y_true_val = torch.cat(y_true_val).numpy()
         end_time = time.time()
 
         print(f"🔁 Residual Epoch {epoch+1}/{epochs} | Train: {avg_train_loss:.6f} | Val: {avg_val_loss:.6f}")
-        log_training_loss(epoch, avg_train_loss, avg_val_loss, start_time, end_time, model_name, model_compoenent="residual")
+        log_training_loss(epoch, avg_train_loss, avg_val_loss, start_time, end_time, model_name, model_component="residual")
 
         log_evaluation_metrics(
             epoch,
@@ -118,6 +123,26 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
             model_name,
             model_component="residual",
         )
+
+
+        if early_stopping:
+            _, aunl_val = calculate_aunl(train_losses, val_losses)
+            updated = tracker.update(model_type, aunl_val)
+
+            if updated:
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                print(
+                    f"⚠️ AUNL {aunl_val:.4f} > best {tracker.get_score(model_type):.4f} ({patience_counter}/{GLOBAL_PATIENCE})"
+                )
+                if patience_counter >= GLOBAL_PATIENCE:
+                    if epoch > MIN_EPOCHS:
+                        print(
+                        f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs."
+                        )
+                        print(f"⏹️ Stopping training at epoch {epoch+1}.")
+                        break
 
 
 def test_evaluation(base_model, res_model, test_loader, scaler, model_name, epoch, device):
@@ -168,8 +193,10 @@ def test_evaluation(base_model, res_model, test_loader, scaler, model_name, epoc
     log_eval_data(model_name, scaler["target"], y_true, y_pred, component="residual")
 
 
-def train_residual_pipeline(model_name, model_type, model_fn, data_config, params, epochs, device, tracker, model_component="main"):
+def train_residual_pipeline(model_name, model_type, model_fn, data_config, params, epochs, tracker, model_component="main"):
     print(f"🧠 Initializing base and residual models: {model_type}")
+    device = data_config['device']
+    
     scaler, (train_loader, val_loader, test_loader), (base_model, residual_model), (_, residual_optimizer), _ = model_fn(
         data_config, params
     )
@@ -182,7 +209,6 @@ def train_residual_pipeline(model_name, model_type, model_fn, data_config, param
         model_fn=model_fn,
         data_config=data_config,
         params=params,
-        device=device,
         epochs=epochs,
         tracker=tracker
     )
@@ -191,9 +217,8 @@ def train_residual_pipeline(model_name, model_type, model_fn, data_config, param
     residual_dataset = compute_residual_dataset(base_model, train_loader, scaler, device)
 
     print("🧠 Training residual model...")
-    residual_model.to(device)
     residual_model.base_model = base_model  # ensure base model is accessible if needed
-    train_residual_model(residual_model, residual_dataset, residual_optimizer, params['batch_size'], epochs, device, model_name, val_loader, scaler)
+    train_residual_model(residual_model, residual_dataset, residual_optimizer, params['batch_size'], epochs, device, model_name, val_loader, scaler, tracker)
 
     print("🧪 Final test evaluation (base + residual):")
     test_evaluation(base_model, residual_model, test_loader, scaler, model_name, epoch=epochs - 1, device=device)

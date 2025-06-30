@@ -4,9 +4,12 @@ from src.logs.utils import log_training_loss, log_evaluation_metrics, log_eval_d
 from src.train.utils import calculate_aunl
 from src.train.utils import RMSELoss
 import os
+from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
+
+
 
 class ComponentTrainer:
     def __init__(self, model, model_name, model_type, component_name, evaluation_component,
@@ -21,6 +24,7 @@ class ComponentTrainer:
         self.patience = patience
         self.min_epochs = min_epochs
         self.tracker = tracker
+        self.early_stopping = True if tracker else False
 
         self.criterion = RMSELoss()
         self.train_losses = []
@@ -86,6 +90,9 @@ class ComponentTrainer:
         return loss.item(), torch.cat(all_preds), torch.cat(all_targets)
 
     def train(self, x_seq, x_per, y_true, val_data, epochs):
+        patience_counter = 0
+        print(f"🧪 Early stopping for [{self.component_name}]: {'✅ Enabled' if self.early_stopping else '❌ Disabled'}")
+
         for epoch in range(epochs):
             # === TRAIN ===
             train_start = time.time()
@@ -115,18 +122,26 @@ class ComponentTrainer:
                 log_evaluation_metrics(epoch, y_true_val, y_pred_val, self.scaler, "val", val_end - val_start, self.model_name)
 
             # === AUNL-based early stopping ===
-            if self.tracker:
+            if self.early_stopping:
                 _, aunl_val = calculate_aunl(self.train_losses, self.val_losses)
                 updated = self.tracker.update(self.component_name, aunl_val)
 
                 if updated:
-                    self.patience_counter = 0
+                    patience_counter = 0
                 else:
-                    self.patience_counter += 1
-                    print(f"\n⚠️ AUNL {aunl_val:.6f} > best {self.tracker.get_score(self.component_name):.6f} ({self.patience_counter}/{self.patience})")
-                    if self.patience_counter >= self.patience:
-                        print(f"\n⏹️ Early stopping {self.component_name} at epoch {epoch+1}.")
-                        break
+                    patience_counter += 1
+                    print(
+                        f"⚠️ AUNL {aunl_val:.4f} > best {self.tracker.get_score(self.component_name):.4f} "
+                        f"({patience_counter}/{GLOBAL_PATIENCE})"
+                    )
+                    if patience_counter >= GLOBAL_PATIENCE:
+                        if epoch > MIN_EPOCHS:
+                            print(
+                                f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs."
+                            )
+                            print(f"⏹️ Stopping training at epoch {epoch+1}.")
+                            break
+
         
         if self.component_name == self.evaluation_component:
             test_start = time.time()
@@ -138,9 +153,10 @@ class ComponentTrainer:
 
 
 
-def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, epochs, device, tracker=None):
+def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, epochs, tracker=None,  model_component="main"):
     scaler, (train_data, val_data, _), model, optimizers, _ = model_fn(data_config, params)
-    model.to(device)
+
+    device = data_config['device']
 
     X_seq_train, X_per_train, y_train = [torch.tensor(x, dtype=torch.float32).to(device) for x in train_data]
     X_seq_val, X_per_val, y_val = [torch.tensor(x, dtype=torch.float32).to(device) for x in val_data]
@@ -155,7 +171,7 @@ def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, 
             evaluation_component='bpnn',
             scaler=scaler,
             optimizer=optimizers[component],  # ✅ pass correct optimizer
-            tracker=tracker.get(component) if tracker else None
+            tracker=tracker
         )
         trainer.train(X_seq_train, X_per_train, y_train, val_tensors, epochs)
 
