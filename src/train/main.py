@@ -32,8 +32,9 @@ def train_model(
 
         log_trial_info(model_name, model_type, trial, params)
 
-        model = pipeline(
+        pipeline(
             model_name=model_name,
+            model_component="main",
             model_type=model_type,
             model_fn=model_fn,
             data_config=data_config,
@@ -43,8 +44,5 @@ def train_model(
             tracker=tracker
         )
 
-        torch.save(model, os.path.join(MODELS, model_name))
-        print(f"💾 Saved model from last epoch as {model_name}")
-
     print(f"\n🏁 All trials complete.")
-    return model
+

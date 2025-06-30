@@ -390,7 +390,7 @@ def get_data_loaders(
     horizon,
     batch_size,
     split_ratio,
-    target_col="vrednost",
+    target_col="load",
     uni=True,
 ):
     print("📦 Starting data loader preparation...")

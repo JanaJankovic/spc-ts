@@ -27,11 +27,12 @@ def get_parameters(model_name):
         p["dropout_rnn"] = random.choice(s["dropout"])
         p["dropout_fc"] = random.choice(s["dropout"])
         p["dropout_cnn"] = random.choice(s["dropout"])
-        p["cnn_channels"] = random.choices(s["cnn_channel"], k=random.choice(s["cnn_size"]))
+        p["cnn_channels"] = random.choice(s["cnn_channel"])
         p["learning_rate"] = random.choice(s["learning_rate"])
         p["kernel_size"] = random.choice(s["kernel_size"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
+        p["use_lstm"] = random.choice(s["use_lstm"])
 
 
     elif model_name == "cnn_lstm":
@@ -40,12 +41,13 @@ def get_parameters(model_name):
         p["lstm_hidden_size"] = random.choice(s["neurons"])
         p["lstm_layers"] = random.choice(s["lstm_layers"])
         p["dense_size"] = random.choice(s["neurons"])
-        p["dropout_conv"] = random.choice(s["dropout"])
+        p["dropout_cnn"] = random.choice(s["dropout"])
         p["dropout_fc"] = random.choice(s["dropout"])
         p["learning_rate"] = random.choice(s["learning_rate"])
         p["use_maxpool"] = random.choice(s["use_maxpool"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
+
 
 
 

@@ -77,8 +77,8 @@ def get_base_residual(data_config, parameters):
     )
 
     base_model = BasePredictor(
-        temporal_dim=1,
-        static_dim=input_shape[1] - 1,
+        temporal_dim=input_shape[-1],
+        static_dim=0,
         rnn_hidden=parameters["rnn_hidden"],
         mlp_hidden=parameters["mlp_hidden"],
         fusion_hidden=parameters["fusion_hidden"],
@@ -89,7 +89,7 @@ def get_base_residual(data_config, parameters):
     )
 
     residual_model = ResidualCNN(
-        temporal_dim=1,
+        temporal_dim=input_shape[-1],
         cnn_channels=parameters["cnn_channels"],
         kernel_size=parameters["kernel_size"],
         output_dim=data_config["horizon"],

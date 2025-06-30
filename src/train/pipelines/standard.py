@@ -10,14 +10,9 @@ MODELS = os.path.join(PROJECT_ROOT, "models")
 GLOBAL_PATIENCE = 10
 
 def forward_batch(model, batch, device):
-    if isinstance(batch, (list, tuple)) and len(batch) == 3:
-        x_seq, x_per, y = batch
-        x_seq, x_per, y = x_seq.to(device), x_per.to(device), y.to(device)
-        y_pred = model(x_seq, x_per)
-    else:
-        x, y = batch
-        x, y = x.to(device), y.to(device)
-        y_pred = model(x)
+    x, y = batch
+    x, y = x.to(device), y.to(device)
+    y_pred = model(x)
 
     return y_pred, y
 
@@ -80,14 +75,17 @@ def evaluate_model(model, val_loader, criterion, device):
 
 
 def standard_train_pipeline(
-    model_name, model_type, model_fn, data_config, params, epochs, device, tracker=None
+    model_name, model_type, model_component, model_fn, data_config, params, epochs, device, tracker=None,
 ):
     early_stopping = True if tracker else False
     global GLOBAL_PATIENCE
 
-    scaler, (train_loader, val_loader, _), model, optimizer, criterion = model_fn(
+    scaler, (train_loader, val_loader, test_loader), model, optimizer, criterion = model_fn(
         data_config, params
     )
+    model = model if not isinstance(model, tuple) else model[0]
+    optimizer = optimizer if not isinstance(optimizer, tuple) else optimizer[0]
+
     target_scaler = scaler["target"] if isinstance(scaler, dict) else scaler
     model.to(device)
 
@@ -95,19 +93,23 @@ def standard_train_pipeline(
     patience_counter = 0
 
     for epoch in range(epochs):
-        start_time = time.time()
-
+        
+        str = time.time()
         train_loss, train_preds, train_targets = train_one_epoch(
             model, train_loader, criterion, optimizer, device
         )
+        etr = time.time()
+
+        svl = time.time()
         val_loss, val_preds, val_targets = evaluate_model(
             model, val_loader, criterion, device
         )
+        evl = time.time()
+
 
         train_losses.append(train_loss)
         val_losses.append(val_loss)
 
-        end_time = time.time()
 
         print(
             f"📈 Epoch {epoch+1}/{epochs} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
@@ -115,7 +117,13 @@ def standard_train_pipeline(
 
         # === Logging ===
         log.log_training_loss(
-            epoch, train_loss, val_loss, start_time, end_time, model_name
+            epoch, 
+            train_loss, 
+            val_loss, 
+            str, 
+            evl, 
+            model_name, 
+            model_component
         )
 
         log.log_evaluation_metrics(
@@ -124,8 +132,9 @@ def standard_train_pipeline(
             train_preds.numpy(),
             target_scaler,
             "train",
-            end_time - start_time,
+            etr - str,
             model_name,
+            model_component
         )
 
         log.log_evaluation_metrics(
@@ -134,10 +143,12 @@ def standard_train_pipeline(
             val_preds.numpy(),
             target_scaler,
             "val",
-            end_time - start_time,
+            evl - svl,
             model_name,
+            model_component
         )
 
+        
         # === Early Stopping based on AUNL ===
         if early_stopping:
             _, aunl_val = calculate_aunl(train_losses, val_losses)
@@ -156,5 +167,34 @@ def standard_train_pipeline(
                         f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs."
                     )
                     break
+
+    sts = time.time()
+    _, test_preds, test_targets = evaluate_model(
+        model, test_loader, criterion, device
+    )
+    ets = time.time()
+    
+    log.log_evaluation_metrics(
+        epoch,
+        test_targets.numpy(),
+        test_preds.numpy(),
+        target_scaler,
+        "test",
+        ets - sts,
+        model_name,
+        model_component
+    )
+
+    log.log_eval_data(
+        model_name, 
+        target_scaler, 
+        test_targets.numpy(), 
+        test_preds.numpy(),
+        model_component, 
+    )
+    
+    if model_component != "base":
+        torch.save(model, os.path.join(MODELS, model_name))
+        print(f"💾 Saved model from last epoch as {model_name}")
 
     return model

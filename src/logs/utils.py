@@ -20,9 +20,10 @@ import json
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 
 LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
-LOSS_LOG = os.path.join(LOG_DIR, "training_loss.csv")
-METRIC_LOG = os.path.join(LOG_DIR, "training_metrics.csv")
+LOSS_LOG = os.path.join(LOG_DIR, "loss.csv")
+METRIC_LOG = os.path.join(LOG_DIR, "metrics.csv")
 TRIAL_LOG = os.path.join(LOG_DIR, "trial_info.csv")
+PRED_DATA = os.path.join(LOG_DIR, "eval_data.csv")
 
 
 def calculate_metrics(y_true, y_pred, elapsed_time, type="test"):
@@ -60,8 +61,6 @@ def calculate_metrics(y_true, y_pred, elapsed_time, type="test"):
 
 
 def log_trial_info(model_name: str, model_type: str, trial: int, params: dict):
-    os.makedirs(os.path.dirname(TRIAL_LOG), exist_ok=True)
-
     entry = {
         "model_name": model_name,
         "model_type": model_type,
@@ -73,13 +72,13 @@ def log_trial_info(model_name: str, model_type: str, trial: int, params: dict):
     df.to_csv(TRIAL_LOG, mode="a", index=False, header=not os.path.exists(TRIAL_LOG))
 
 
-def log_training_loss(epoch, train_loss, val_loss, start_time, end_time, model_name, model_compoenent=None):
+def log_training_loss(epoch, train_loss, val_loss, start_time, end_time, model_name, model_compoenent="main"):
     start_dt = datetime.fromtimestamp(start_time)
     end_dt = datetime.fromtimestamp(end_time)
 
     entry = {
         "model": model_name,
-        "model_component": model_compoenent if model_compoenent else "main",
+        "model_component": model_compoenent,
         "epoch": epoch + 1,
         "start_epoch_time": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "end_epoch_time": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
@@ -100,6 +99,7 @@ def log_evaluation_metrics(
     eval_type,
     elapsed_time,
     model_name,
+    model_component="main"
 ):
     y_true = scaler.inverse_transform(y_true)
     y_pred = scaler.inverse_transform(y_pred)
@@ -108,9 +108,11 @@ def log_evaluation_metrics(
     metrics["epoch"] = epoch + 1
     metrics["type"] = eval_type
     metrics["model"] = model_name
+    metrics["model_component"] = model_component
 
     column_order = [
         "model",
+        "model_component",
         "epoch",
         "type",
         "inference",
@@ -127,6 +129,25 @@ def log_evaluation_metrics(
     pd.DataFrame([metrics_ordered]).to_csv(
         METRIC_LOG, mode="a", index=False, header=not os.path.exists(METRIC_LOG)
     )
+
+
+def log_eval_data(model_name, scaler, y_true, y_pred, component="main"):
+    y_true = scaler.inverse_transform(y_true)
+    y_pred = scaler.inverse_transform(y_pred)
+
+    y_true_serializable = json.dumps(y_true.tolist(), sort_keys=True)
+    y_pred_serializable = json.dumps(y_pred.tolist(), sort_keys=True)
+
+    entry = {
+        "model_name": model_name,
+        "component": component,
+        "y_true": y_true_serializable,
+        "y_pred": y_pred_serializable,
+    }
+
+    df = pd.DataFrame([entry])
+    df.to_csv(PRED_DATA, mode="a", index=False, header=not os.path.exists(TRIAL_LOG))
+
 
 
 def create_logs_files():
@@ -147,6 +168,7 @@ def create_logs_files():
         csv.writer(f).writerow(
             [
                 "model",
+                "component",
                 "epoch",
                 "type",
                 "inference",
@@ -162,3 +184,7 @@ def create_logs_files():
 
     with open(TRIAL_LOG, "w", newline="") as f:
         csv.writer(f).writerow(["model_name", "model_type", "trial", "params"])
+
+
+    with open(PRED_DATA, "w", newline="") as f:
+        csv.writer(f).writerow(["model_name", "component", "y_true", "y_pred"])

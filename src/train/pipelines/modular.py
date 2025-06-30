@@ -1,9 +1,12 @@
 import torch
 import time
-from src.logs.utils import log_training_loss, log_evaluation_metrics
+from src.logs.utils import log_training_loss, log_evaluation_metrics, log_eval_data
 from src.train.utils import calculate_aunl
 from src.train.utils import RMSELoss
+import os
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+MODELS = os.path.join(PROJECT_ROOT, "models")
 
 class ComponentTrainer:
     def __init__(self, model, model_name, model_type, component_name, evaluation_component,
@@ -68,7 +71,7 @@ class ComponentTrainer:
 
         return loss.item(), pred.detach().cpu(), y_true.detach().cpu()
 
-    def validate(self, val_data):
+    def evaluate(self, val_data):
         self.model.eval()
         all_preds, all_targets = [], []
 
@@ -91,7 +94,7 @@ class ComponentTrainer:
 
             # === VALIDATE ===
             val_start = time.time()
-            val_loss, y_pred_val, y_true_val = self.validate(val_data)
+            val_loss, y_pred_val, y_true_val = self.evaluate(val_data)
             val_end = time.time()
 
             self.train_losses.append(train_loss)
@@ -124,6 +127,14 @@ class ComponentTrainer:
                     if self.patience_counter >= self.patience:
                         print(f"\n⏹️ Early stopping {self.component_name} at epoch {epoch+1}.")
                         break
+        
+        if self.component_name == self.evaluation_component:
+            test_start = time.time()
+            _, y_pred_test, y_true_test = self.evaluate(val_data)
+            test_end = time.time()
+
+            log_evaluation_metrics(epoch, y_true_test, y_pred_test, self.scaler, "test", test_end - test_start, self.model_name)
+            log_eval_data(self.model_name, self.scaler, y_true_test, y_pred_test)
 
 
 
@@ -147,5 +158,8 @@ def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, 
             tracker=tracker.get(component) if tracker else None
         )
         trainer.train(X_seq_train, X_per_train, y_train, val_tensors, epochs)
+
+    torch.save(model, os.path.join(MODELS, model_name))
+    print(f"💾 Saved model from last epoch as {model_name}")
 
     return model

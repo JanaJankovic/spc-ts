@@ -1,6 +1,7 @@
 from src.train.globals import GlobalTracker
 from src.train.pipelines.standard import standard_train_pipeline
 from src.train.pipelines.modular import train_dirnn_pipeline
+from src.train.pipelines.residual import train_residual_pipeline
 
 
 DI_RNN_tracker = {
@@ -24,3 +25,6 @@ def get_training_pipeline(model_type):
         return standard_train_pipeline, GlobalTracker(CNN_LSTM_tracker)
     elif model_type == "di_rnn" or model_type == "cnn_di_rnn":
         return train_dirnn_pipeline, GlobalTracker(DI_RNN_tracker)
+    elif model_type == "base_residual":
+        return train_residual_pipeline, GlobalTracker(BASE_RESIDUAL_tracker)
+
