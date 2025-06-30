@@ -172,44 +172,39 @@ def build_traditional_sequences(df, lookback, horizon, target_col="load"):
     return np.array(X), np.array(y)
 
 
-def build_periodic_sequences(df_all, n, horizon):
-    print(f"⚡ Fast periodic sequence builder: n={n}, horizon={horizon}")
+def build_periodic_sequences(df, lookback, horizon, n):
+    print(f"⚡ Building periodic inputs aligned with traditional sequences (lookback={lookback}, horizon={horizon}, n={n})")
 
-    values = df_all.values
+    values = df.values  # shape (T, features)
     total_len = len(values)
     X_per = []
 
-    offset = n * 24 + horizon
-    total = total_len - offset
-    print(f"📊 Total samples to process: {total}")
+    # This ensures the same starting point as traditional loop
+    start_idx = max(lookback, n * 24)
+    end_idx = total_len - horizon
 
-    for idx in range(offset, total_len - horizon):
+    print(f"📊 Total samples to process: {end_idx - start_idx}")
+
+    for idx in range(start_idx, end_idx):
         p_input = []
         valid = True
 
         for i in range(1, n + 1):
-            start_idx = idx - i * 24 + 1  # +1 = skip current hour
-            end_idx = start_idx + horizon
-
-            if end_idx > total_len:
+            lookup_idx = idx - i * 24
+            if lookup_idx < 0:
                 valid = False
                 break
-
-            vals = values[start_idx:end_idx]
-            if len(vals) < horizon:
-                valid = False
-                break
-
-            p_input.append(vals.mean(axis=0))
+            p_input.append(values[lookup_idx])
 
         if valid:
             X_per.append(np.stack(p_input))  # shape (n, features)
 
-        if (idx - offset) % 1000 == 0:
-            print(f"🔄 Processed {idx - offset + 1}/{total}", end="\r")
+        if (idx - start_idx) % 1000 == 0:
+            print(f"🔄 Processed {idx - start_idx + 1}/{end_idx - start_idx}", end="\r")
 
     print(f"\n✅ Periodic sequences built: {len(X_per)}")
     return np.array(X_per)
+
 
 
 def smooth_and_clean_target(

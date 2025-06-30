@@ -1,6 +1,5 @@
 import torch
 import os
-from datetime import datetime
 import time
 import src.logs.utils as log
 from src.train.utils import calculate_aunl
@@ -8,9 +7,7 @@ from src.train.utils import calculate_aunl
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
 
-GLOBAL_BEST_AUNL = float("inf")
-GLOBAL_PATIENCE = 5
-
+GLOBAL_PATIENCE = 10
 
 def forward_batch(model, batch, device):
     if isinstance(batch, (list, tuple)) and len(batch) == 3:
@@ -82,10 +79,11 @@ def evaluate_model(model, val_loader, criterion, device):
     )
 
 
-def train_trial(
-    model_name, model_fn, data_config, params, epochs, device, early_stopping=False
+def standard_train_pipeline(
+    model_name, model_type, model_fn, data_config, params, epochs, device, tracker=None
 ):
-    global GLOBAL_BEST_AUNL, GLOBAL_PATIENCE
+    early_stopping = True if tracker else False
+    global GLOBAL_PATIENCE
 
     scaler, (train_loader, val_loader, _), model, optimizer, criterion = model_fn(
         data_config, params
@@ -131,28 +129,26 @@ def train_trial(
         )
 
         log.log_evaluation_metrics(
-            log.METRIC_LOG,
             epoch,
             val_targets.numpy(),
             val_preds.numpy(),
             target_scaler,
             "val",
             end_time - start_time,
-            log.evaluate_metrics,
             model_name,
         )
 
         # === Early Stopping based on AUNL ===
         if early_stopping:
             _, aunl_val = calculate_aunl(train_losses, val_losses)
+            updated = tracker.update(model_type, aunl_val)
 
-            if aunl_val < GLOBAL_BEST_AUNL:
-                GLOBAL_BEST_AUNL = aunl_val
+            if updated:
                 patience_counter = 0
             else:
                 patience_counter += 1
                 print(
-                    f"⚠️ AUNL {aunl_val:.4f} > best {GLOBAL_BEST_AUNL:.4f} ({patience_counter}/{GLOBAL_PATIENCE})"
+                    f"⚠️ AUNL {aunl_val:.4f} > best {tracker.get_score(model_type):.4f} ({patience_counter}/{GLOBAL_PATIENCE})"
                 )
 
                 if patience_counter >= GLOBAL_PATIENCE:
@@ -161,37 +157,4 @@ def train_trial(
                     )
                     break
 
-    return model
-
-
-def train_model(
-    model_type,
-    model_fn,
-    data_config,
-    param_sampler,
-    trials=1,
-    epochs=50,
-    device=None,
-):
-    os.makedirs(MODELS, exist_ok=True)
-
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-
-    for trial in range(trials):
-        print(f"\n🔁 Trial {trial+1}/{trials}")
-        params = param_sampler()
-
-        # Save model name early
-        date_str = datetime.now().strftime("%d%m%Y")
-        model_name = f"{date_str}_t{trial+1}_{model_type}.pt"
-
-        # Log trial info
-        log.log_trial_info(model_name, model_type, trial, params)
-
-        model = train_trial(model_name, model_fn, data_config, params, epochs, device)
-
-        torch.save(model, os.path.join(MODELS, model_name))
-        print(f"💾 Saved model from last epoch as {model_name}")
-
-    print(f"\n🏁 All trials complete.")
     return model

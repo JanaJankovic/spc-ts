@@ -82,9 +82,9 @@ def di_rnn_pipeline(load_path, m, n, horizon, target_col="load"):
         test_df, m, horizon, target_col
     )
 
-    X_p_train = utils.build_periodic_sequences(train_df, n, horizon)
-    X_p_val = utils.build_periodic_sequences(val_df, n, horizon)
-    X_p_test = utils.build_periodic_sequences(test_df, n, horizon)
+    X_p_train = utils.build_periodic_sequences(train_df, m, horizon, n)
+    X_p_val = utils.build_periodic_sequences(val_df, m, horizon, n)
+    X_p_test = utils.build_periodic_sequences(test_df, m, horizon, n)
 
     train_data = (X_s_train, X_p_train, y_s_train)
     val_data = (X_s_val, X_p_val, y_s_val)

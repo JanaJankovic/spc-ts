@@ -125,20 +125,23 @@ def get_di_rnn(data_config, parameters):
     )
 
     model = DIRNN(
-        seq_input_size=data_config["m"],
-        per_input_size=data_config["n"],
+        seq_input_size=1,
+        per_input_size=1,
         hidden_size=parameters["hidden_size"],
         bp_hidden_size=parameters["bp_hidden_size"],
         dropout=parameters["dropout_rnn"],
         horizon=data_config["horizon"],
     )
 
-    optimizer = get_optimizer(
-        parameters["optimizer"], model.parameters(), parameters["learning_rate"]
-    )
+    optimizers = {
+        "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),
+        "p_rnn": get_optimizer(parameters["optimizer"], model.p_rnn.parameters(), parameters["lr_rnn"]),
+        "bpnn": get_optimizer(parameters["optimizer"], model.bpnn.parameters(), parameters["lr_bpnn"]),
+    }
+
     criterion = nn.L1Loss()
 
-    return scaler, data, model, optimizer, criterion
+    return scaler, data, model, optimizers, criterion
 
 
 def get_cnn_di_rnn(data_config, parameters):
@@ -150,9 +153,13 @@ def get_cnn_di_rnn(data_config, parameters):
         target_col=data_config["target_col"],
     )
 
+    x_seq, x_per, _ = data[0]  # Get one batch of training data
+    seq_input_size = x_seq.shape[-1]
+    per_input_size = x_per.shape[-1]
+
     model = CNN_DIRNN(
-        seq_input_size=data_config["m"],
-        per_input_size=data_config["n"],
+        seq_input_size=seq_input_size,
+        per_input_size=per_input_size,
         hidden_size=parameters["hidden_size"],
         bp_hidden_size=parameters["bp_hidden_size"],
         dropout=parameters["dropout_rnn"],
@@ -161,9 +168,12 @@ def get_cnn_di_rnn(data_config, parameters):
         kernel_size=parameters["kernel_size"],
     )
 
-    optimizer = get_optimizer(
-        parameters["optimizer"], model.parameters(), parameters["learning_rate"]
-    )
+    optimizers = {
+        "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),
+        "p_rnn": get_optimizer(parameters["optimizer"], model.p_rnn.parameters(), parameters["lr_rnn"]),
+        "bpnn": get_optimizer(parameters["optimizer"], model.bpnn.parameters(), parameters["lr_bpnn"]),
+    }
+
     criterion = nn.L1Loss()
 
-    return scaler, data, model, optimizer, criterion
+    return scaler, data, model, optimizers, criterion

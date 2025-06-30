@@ -8,8 +8,6 @@ from sklearn.metrics import (
 )
 from scipy.stats import spearmanr
 import numpy as np
-import torch
-import torch.nn as nn
 import os
 import pandas as pd
 from datetime import datetime
@@ -25,16 +23,6 @@ LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
 LOSS_LOG = os.path.join(LOG_DIR, "training_loss.csv")
 METRIC_LOG = os.path.join(LOG_DIR, "training_metrics.csv")
 TRIAL_LOG = os.path.join(LOG_DIR, "trial_info.csv")
-
-
-class RMSELoss(nn.Module):
-    def __init__(self, eps=1e-8):
-        super().__init__()
-        self.eps = eps
-
-    def forward(self, y_pred, y_true):
-        se = (y_true - y_pred) ** 2
-        return torch.sqrt(torch.mean(se) + self.eps)
 
 
 def calculate_metrics(y_true, y_pred, elapsed_time, type="test"):
@@ -85,12 +73,13 @@ def log_trial_info(model_name: str, model_type: str, trial: int, params: dict):
     df.to_csv(TRIAL_LOG, mode="a", index=False, header=not os.path.exists(TRIAL_LOG))
 
 
-def log_training_loss(epoch, train_loss, val_loss, start_time, end_time, model_name):
+def log_training_loss(epoch, train_loss, val_loss, start_time, end_time, model_name, model_compoenent=None):
     start_dt = datetime.fromtimestamp(start_time)
     end_dt = datetime.fromtimestamp(end_time)
 
     entry = {
         "model": model_name,
+        "model_component": model_compoenent if model_compoenent else "main",
         "epoch": epoch + 1,
         "start_epoch_time": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "end_epoch_time": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
@@ -145,6 +134,7 @@ def create_logs_files():
         csv.writer(f).writerow(
             [
                 "model",
+                "component",
                 "epoch",
                 "start_epoch_time",
                 "end_epoch_time",
