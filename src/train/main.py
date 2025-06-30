@@ -33,7 +33,7 @@ def train_model(
         date_str = datetime.now().strftime("%Y%m%d%H%M%S")
         model_name = f"{date_str}_t{trial+1}_{model_type}.pt"
 
-        log_trial_info(model_name, model_type, trial, data_config['load_path'], params)
+        log_trial_info(model_name, model_type, trial, data_config, params)
 
         pipeline(
             model_name=model_name,

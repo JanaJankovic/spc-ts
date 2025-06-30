@@ -12,9 +12,13 @@ def load_and_resample(df, time_col, freq="1h", agg="mean"):
     df[time_col] = pd.to_datetime(df[time_col])
     df.set_index(time_col, inplace=True)
     df = df.sort_index()
+
     df_resampled = getattr(df.resample(freq), agg)()
+    df_resampled = df_resampled.reset_index()  # <-- bring back datetime as column
+
     print(f"✅ Resampling complete. Resulting shape: {df_resampled.shape}")
     return df_resampled
+
 
 
 def split_dataframe(df, splits):
@@ -239,7 +243,8 @@ def smooth_and_clean_target(
     return df
 
 
-def add_time_features(df, datetime_col="ts", holidays=None, include_hour_features=True):
+def add_time_features(df, datetime_col="datetime", holidays=None, include_hour_features=True):
+    print(df.columns)
     df[datetime_col] = pd.to_datetime(df[datetime_col])
 
     df["day_of_week"] = df[datetime_col].dt.dayofweek
@@ -257,8 +262,6 @@ def add_time_features(df, datetime_col="ts", holidays=None, include_hour_feature
     if holidays is not None:
         holiday_dates = pd.to_datetime(holidays).dt.date
         df["is_holiday"] = df[datetime_col].dt.date.isin(holiday_dates).astype(int)
-    else:
-        df["is_holiday"] = 0
 
     return df
 

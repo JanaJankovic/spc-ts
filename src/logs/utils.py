@@ -60,16 +60,16 @@ def calculate_metrics(y_true, y_pred, elapsed_time, type="test"):
 
 
 # === Log Functions ===
-def log_trial_info(model_name: str, model_type: str, trial: int, params: dict, data_path: str):
+def log_trial_info(model_name: str, model_type: str, trial: int, params: dict, data_config: dict):
     entry = {
         "model_name": model_name,
         "model_type": model_type,
         "trial": trial,
+        "data_config": json.dumps(data_config, sort_keys=True),
         "params": json.dumps(params, sort_keys=True),
-        "data": data_path,
     }
 
-    df = pd.DataFrame([entry], columns=["model_name", "model_type", "trial", "data", "params"])
+    df = pd.DataFrame([entry], columns=["model_name", "model_type", "trial", "data_config", "params"])
     df.to_csv(TRIAL_LOG, mode="a", index=False, header=not os.path.exists(TRIAL_LOG))
 
 

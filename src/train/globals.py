@@ -13,5 +13,5 @@ class GlobalTracker:
         return self.model_scores.get(model_name, float('inf'))
     
 
-GLOBAL_PATIENCE = 1
-MIN_EPOCHS = 2
+GLOBAL_PATIENCE = 2
+MIN_EPOCHS = 5

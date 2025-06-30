@@ -17,7 +17,7 @@ def cnn_lstm_pipeline(
     lookback,
     horizon,
     batch,
-    time_col="hour",
+    time_col="datetime",
     target_col="load",
     freq="1h",
     use_calendar=True,

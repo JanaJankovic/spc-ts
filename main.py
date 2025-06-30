@@ -6,8 +6,8 @@ import torch
 import gc
 import os
 
-EPOCHS = 3
-TRIALS = 1
+EPOCHS = 50
+TRIALS = 50
 
 DATA_DIR = "data/processed"
 
@@ -58,6 +58,7 @@ def base_residual(data_config):
         epochs=EPOCHS,
         early_stopping=True
     )
+
 
 
 def di_rnn(data_config):
@@ -126,6 +127,7 @@ if __name__ == "__main__":
 
     mm_files = [f for f in os.listdir(DATA_DIR) if f.startswith("mm") and f.endswith(".csv")]
     
+    # 1 hour
     for file in mm_files:
         data_config['load_path'] = f'data/processed/{file}'
 
@@ -141,4 +143,16 @@ if __name__ == "__main__":
         cnn_di_rnn(data_config)
         torch.cuda.empty_cache(); gc.collect()
 
+
+    # 1 day
+    data_config['freq'] = '1d'
+    data_config['lookback'] = 14
+    for file in mm_files:
+        data_config['load_path'] = f'data/processed/{file}'
+
+        cnn_lstm(data_config)
+        torch.cuda.empty_cache(); gc.collect()
+
+        base_residual(data_config)
+        torch.cuda.empty_cache(); gc.collect()
 
