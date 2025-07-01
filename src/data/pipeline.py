@@ -67,30 +67,30 @@ def cnn_lstm_pipeline(
     )
 
 
-def di_rnn_pipeline(load_path, m, n, horizon, target_col="load"):
+def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load"):
     df = pd.read_csv(load_path)
 
     scaler, train_df, val_df, test_df = utils.scale_uni_data(
         utils.split_dataframe(df, SPLIT_RATIO)
     )
 
-    X_s_train, y_s_train = utils.build_traditional_sequences(
-        train_df, m, horizon, target_col
-    )
+    # Sequential component
+    X_s_train, y_s_train = utils.build_traditional_sequences(train_df, m, horizon, target_col)
     X_s_val, y_s_val = utils.build_traditional_sequences(val_df, m, horizon, target_col)
-    X_s_test, y_s_test = utils.build_traditional_sequences(
-        test_df, m, horizon, target_col
-    )
+    X_s_test, y_s_test = utils.build_traditional_sequences(test_df, m, horizon, target_col)
 
+    # Periodic component
     X_p_train = utils.build_periodic_sequences(train_df, m, horizon, n)
     X_p_val = utils.build_periodic_sequences(val_df, m, horizon, n)
     X_p_test = utils.build_periodic_sequences(test_df, m, horizon, n)
 
-    train_data = (X_s_train, X_p_train, y_s_train)
-    val_data = (X_s_val, X_p_val, y_s_val)
-    test_data = (X_s_test, X_p_test, y_s_test)
+    # Convert to DataLoaders
+    train_loader = utils.to_loader(X_s_train, X_p_train, y_s_train, batch_size)
+    val_loader = utils.to_loader(X_s_val, X_p_val, y_s_val, batch_size)
+    test_loader = utils.to_loader(X_s_test, X_p_test, y_s_test, batch_size)
 
-    return scaler, (train_data, val_data, test_data)
+    return scaler, (train_loader, val_loader, test_loader)
+
 
 
 def base_residual_pipeline(

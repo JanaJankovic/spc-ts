@@ -89,7 +89,7 @@ class ComponentTrainer:
 
         return loss.item(), torch.cat(all_preds), torch.cat(all_targets)
 
-    def train(self, x_seq, x_per, y_true, val_data, epochs):
+    def train(self, x_seq, x_per, y_true, val_data, test_data, epochs):
         patience_counter = 0
         print(f"🧪 Early stopping for [{self.component_name}]: {'✅ Enabled' if self.early_stopping else '❌ Disabled'}")
 
@@ -145,7 +145,7 @@ class ComponentTrainer:
         
         if self.component_name == self.evaluation_component:
             test_start = time.time()
-            _, y_pred_test, y_true_test = self.evaluate(val_data)
+            _, y_pred_test, y_true_test = self.evaluate(test_data)
             test_end = time.time()
 
             log_evaluation_metrics(epoch, y_true_test, y_pred_test, self.scaler, "test", test_end - test_start, self.model_name)
@@ -153,14 +153,30 @@ class ComponentTrainer:
 
 
 
-def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, epochs, tracker=None,  model_component="main"):
-    scaler, (train_data, val_data, _), model, optimizers, _ = model_fn(data_config, params)
-
+def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, epochs, tracker=None, model_component="main"):
+    scaler, (train_loader, val_loader, test_loader), model, optimizers, _ = model_fn(data_config, params)
     device = data_config['device']
 
-    X_seq_train, X_per_train, y_train = [torch.tensor(x, dtype=torch.float32).to(device) for x in train_data]
-    X_seq_val, X_per_val, y_val = [torch.tensor(x, dtype=torch.float32).to(device) for x in val_data]
+    # Extract full batch (assuming no batch splitting for component-wise training)
+    X_seq_train, X_per_train, y_train = next(iter(train_loader))
+    X_seq_val, X_per_val, y_val = next(iter(val_loader))
+    X_seq_test, X_per_test, y_test = next(iter(test_loader))
+
+    X_seq_train = X_seq_train.to(device)
+    X_per_train = X_per_train.to(device)
+    y_train = y_train.to(device)
+
+    X_seq_val = X_seq_val.to(device)
+    X_per_val = X_per_val.to(device)
+    y_val = y_val.to(device)
+
+    X_seq_test = X_seq_test.to(device)
+    X_per_test = X_per_test.to(device)
+    y_test = y_test.to(device)
+
     val_tensors = (X_seq_val, X_per_val, y_val)
+    
+    test_tensors = (X_seq_test, X_per_test, y_test)
 
     for component in ['s_rnn', 'p_rnn', 'bpnn']:
         trainer = ComponentTrainer(
@@ -170,10 +186,10 @@ def train_dirnn_pipeline(model_name, model_type, model_fn, data_config, params, 
             component_name=component,
             evaluation_component='bpnn',
             scaler=scaler,
-            optimizer=optimizers[component],  # ✅ pass correct optimizer
+            optimizer=optimizers[component],
             tracker=tracker
         )
-        trainer.train(X_seq_train, X_per_train, y_train, val_tensors, epochs)
+        trainer.train(X_seq_train, X_per_train, y_train, val_tensors, test_tensors, epochs)
 
     torch.save(model, os.path.join(MODELS, model_name))
     print(f"💾 Saved model from last epoch as {model_name}")
