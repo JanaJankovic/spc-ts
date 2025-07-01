@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 
 def fill_missing_time(df, datetime_col, method="interpolate"):
-    freq="1h"
+    freq = "1h"
     
     df = df.copy()
     df[datetime_col] = pd.to_datetime(df[datetime_col])
@@ -16,17 +16,22 @@ def fill_missing_time(df, datetime_col, method="interpolate"):
     full_range = pd.date_range(df.index.min(), df.index.max(), freq=freq)
     df = df.reindex(full_range)
 
-    # Interpolate (default), or fill
+    # Fill missing values according to the method
     if method == "interpolate":
         df = df.interpolate()
     elif method == "ffill":
         df = df.ffill()
     elif method == "bfill":
         df = df.bfill()
+    elif method == "drop":
+        df = df.dropna()
+    else:
+        raise ValueError(f"Unknown fill method: {method}")
 
     df = df.reset_index().rename(columns={"index": datetime_col})
 
     return df
+
 
 
 

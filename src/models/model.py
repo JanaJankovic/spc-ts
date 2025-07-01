@@ -212,3 +212,56 @@ def get_cnn_di_rnn(data_config, parameters):
 
     return scaler, data, model, criterion
 
+
+def get_model_fn(model_type):
+    if model_type == 'cnn_lstm':
+        return get_cnn_lstm
+    elif model_type == 'lstm':
+        return get_lstm
+    elif model_type == 'di_rnn':
+        return get_di_rnn
+    elif model_type == 'cnn_di_rnn':
+        return get_cnn_di_rnn
+    elif model_type == 'base_residual':
+        return get_base_residual
+    else:
+        raise ValueError(f"❌ Unknown model type: '{model_type}'")
+    
+
+
+def get_model_component_names(model_type, component):
+    if model_type == "lstm":
+        if component in ["dense", "dense_cnn"]:
+            return ["fc2"]
+        else:
+            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+    elif model_type == "di_rnn":
+        if component in ["dense", "dense_cnn"]:
+            return ["bpnn.fc2"]
+        else:
+            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+    elif model_type == "base_residual":
+        if component in ["dense", "dense_cnn"]:
+            return ["fc"]
+        else:
+            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+    elif model_type == "cnn_lstm":
+        if component == "dense":
+            return ["fc2"]
+        elif component == "cnn":
+            return [f"convs.{i}" for i in range(3)]
+        elif component == "dense_cnn":
+            return [f"convs.{i}" for i in range(3)] + ["fc2"]
+        else:
+            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+    elif model_type == "cnn_di_rnn":
+        if component == "dense":
+            return ["bpnn.fc2"]
+        elif component == "cnn":
+            return ["cnn_seq", "cnn_per"]
+        elif component == "dense_cnn":
+            return ["cnn_seq", "cnn_per", "bpnn.fc2"]
+        else:
+            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}")

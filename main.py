@@ -125,7 +125,7 @@ def cnn_di_rnn(data_config):
 
 
 if __name__ == "__main__":
-    #log.create_logs_files() 
+    log.create_logs_files() 
 
     data_config = {
         'load_path': '',
@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
     data_config['freq'] = '1d'
     data_config['lookback'] = 14
-    mm_files = ['mm166942.csv']
+    mm_files = ['mm118648.csv', 'mm9725.csv']
 
     for file in mm_files:
         data_config['load_path'] = f'data/processed/{file}'

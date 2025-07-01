@@ -2,6 +2,7 @@ from src.train.globals import GlobalTracker
 from src.train.pipelines.standard import standard_train_pipeline
 from src.train.pipelines.modular import train_dirnn_pipeline
 from src.train.pipelines.residual import train_residual_pipeline
+from src.train.pipelines.transfer import transfer_learning_pipeline
 
 
 # Store best AUNL and best metric (use None or inf as default)
@@ -35,5 +36,7 @@ def get_training_pipeline(model_type):
         return train_dirnn_pipeline, GlobalTracker(DI_RNN_tracker)
     elif model_type == "base_residual":
         return train_residual_pipeline, GlobalTracker(BASE_RESIDUAL_tracker)
+    elif model_type == "transfer_learning":
+        return transfer_learning_pipeline, None
     
 

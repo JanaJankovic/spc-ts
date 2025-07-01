@@ -4,15 +4,32 @@ import os
 from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 import src.logs.utils as log
 import time
+from src.models.model import get_optimizer
 
-def freeze_all_except(model, parameter_names_to_tune):
-    for name, param in model.named_parameters():
-        param.requires_grad = any(name.startswith(target) for target in parameter_names_to_tune)
+LEARNING_RATE = 0.0001
 
-def run_transfer_learning(
-    model_name, model_type, model_component, param_names_to_tune, model_fn, data_config, params, epochs
+def freeze_all_except(model, component_names):
+    # Freeze all parameters once
+    for param in model.parameters():
+        param.requires_grad = False
+    # Unfreeze each requested component
+    for component_name in component_names:
+        for param in getattr(model, component_name).parameters():
+            param.requires_grad = True
+
+
+def transfer_learning_pipeline(
+    model, model_type, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs
 ):
-    scaler, (train_loader, val_loader, test_loader), model, optimizer, criterion = model_fn(
+    if model_type == 'base_residual':
+        non_standard_tl_pipeline()
+    else:
+        standard_tl_pipeline(model, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs)
+
+
+def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs
+):
+    scaler, (train_loader, val_loader, test_loader), _, optimizer, criterion = model_fn(
         data_config, params
     )
     # Step 1: Freeze everything except desired parameters
@@ -20,7 +37,8 @@ def run_transfer_learning(
     freeze_all_except(model, param_names_to_tune)
     model = model.to(device)
 
-    # Step 3: Training loop
+    optimizer = get_optimizer(params['optimizer'], model.parameters(), LEARNING_RATE)
+
     best_val_loss = float('inf')
     patience = 0
 
@@ -29,7 +47,7 @@ def run_transfer_learning(
         train_loss = 0
         train_pred, train_y = [], []
         
-        str = time.time()
+        str_time = time.time()
         for x, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
             x, y = x.to(device), y.to(device)
             optimizer.zero_grad()
@@ -79,12 +97,11 @@ def run_transfer_learning(
                     print("🛑 Early stopping triggered.")
                     break
         
-        
         log.log_training_loss(
             epoch, 
             train_loss, 
             val_loss, 
-            str, 
+            str_time, 
             evl, 
             model_name, 
             model_component
@@ -96,7 +113,7 @@ def run_transfer_learning(
             torch.cat(train_pred),
             scaler,
             "train",
-            etr - str,
+            etr - str_time,
             model_name,
             model_component
         )
@@ -112,7 +129,6 @@ def run_transfer_learning(
             model_component
         )
 
-
     # Load best model
     model = torch.load(model_name)
 
@@ -126,6 +142,7 @@ def run_transfer_learning(
         for x, y in test_loader:
             x, y = x.to(device), y.to(device)
             output = model(x)
+            loss = criterion(output, y)
             test_loss += loss.item()
             test_pred.append(output.cpu())
             test_y.append(y.cpu())
@@ -133,7 +150,6 @@ def run_transfer_learning(
     test_loss /= len(test_loader)
     ets = time.time()
     print(f"🧪 Final Test Loss: {test_loss:.4f}")
-
 
     log.log_evaluation_metrics(
         epoch,
@@ -146,4 +162,11 @@ def run_transfer_learning(
         model_component
     )
 
+    # LOG data
+    log.log_eval_data(model_name, scaler, torch.cat(test_y), torch.cat(test_pred), "tl")
+
     return model
+
+
+def non_standard_tl_pipeline():
+    pass
