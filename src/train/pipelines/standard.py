@@ -2,8 +2,8 @@ import torch
 import os
 import time
 import src.logs.utils as log
-from src.train.utils import calculate_aunl, drop_extra_targets
-from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
+from src.train.utils import calculate_aunl, drop_extra_targets, calculate_metrics
+from src.train.globals import TRACKING_METRIC, MIN_EPOCHS
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
@@ -155,26 +155,23 @@ def standard_train_pipeline(
             model_component
         )
 
-        
-        # === Early Stopping based on AUNL ===
-        if early_stopping:
-            _, aunl_val = calculate_aunl(train_losses, val_losses)
-            updated = tracker.update(model_type, aunl_val)
 
-            if updated:
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                print(
-                    f"⚠️ AUNL {aunl_val:.4f} > best {tracker.get_score(model_type):.4f} ({patience_counter}/{GLOBAL_PATIENCE})"
-                )
-                if patience_counter >= GLOBAL_PATIENCE:
-                    if epoch > MIN_EPOCHS:
-                        print(
-                        f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs."
-                        )
-                        print(f"⏹️ Stopping training at epoch {epoch+1}.")
-                        break
+        # === Early stopping ===
+        if early_stopping:
+            metrics = calculate_metrics(scaler, val_targets.numpy(),val_preds.numpy(), 0, '')
+            metric = metrics[TRACKING_METRIC]
+            _, aunl = calculate_aunl(train_losses, val_losses)
+            
+            if epoch > MIN_EPOCHS:
+                if aunl > tracker.get_score(model_type, 'aunl'):
+                    print(f"⚠️ No improvement in AUNL ({aunl}/{tracker.get_score(model_type, 'aunl')})")
+                    print("🛑 Early stopping.")
+                    break
+
+            if metric < tracker.get_score(model_type, 'metric'):
+                tracker.update_aunl(model_type, aunl)
+                tracker.update_metric(model_type, metric)
+
 
     sts = time.time()
     _, test_preds, test_targets = evaluate_model(

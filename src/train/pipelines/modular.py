@@ -1,10 +1,10 @@
 import torch
 import time
 from src.logs.utils import log_training_loss, log_evaluation_metrics, log_eval_data
-from src.train.utils import calculate_aunl
+from src.train.utils import calculate_aunl, calculate_metrics
 from src.train.utils import RMSELoss
 import os
-from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
+from src.train.globals import TRACKING_METRIC, MIN_EPOCHS
 from src.models.model import get_optimizer
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -166,23 +166,22 @@ class ComponentTrainer:
                 log_evaluation_metrics(epoch, y_true_tr, y_pred_tr, self.scaler, "train", train_end - train_start, self.model_name)
                 log_evaluation_metrics(epoch, y_true_val, y_pred_val, self.scaler, "val", val_end - val_start, self.model_name)
 
-            # === Early stopping based on AUNL ===
+            
             if self.early_stopping:
-                _, aunl_val = calculate_aunl(self.train_losses, self.val_losses)
-                updated = self.tracker.update(self.component_name, aunl_val)
-
-                if updated:
-                    patience_counter = 0
-                else:
-                    patience_counter += 1
-                    print(
-                        f"⚠️ AUNL {aunl_val:.4f} > best {self.tracker.get_score(self.component_name):.4f} "
-                        f"({patience_counter}/{GLOBAL_PATIENCE})"
-                    )
-                    if patience_counter >= GLOBAL_PATIENCE and epoch > MIN_EPOCHS:
-                        print(f"🛑 Early Stopping: No AUNL improvement after {GLOBAL_PATIENCE} epochs.")
-                        print(f"⏹️ Stopping training at epoch {epoch + 1}.")
+                metrics = calculate_metrics(self.scaler, y_true_val, y_pred_val, 0, '')
+                metric = metrics[TRACKING_METRIC]
+                _, aunl = calculate_aunl(self.train_losses, self.val_losses)
+                
+                if epoch > MIN_EPOCHS:
+                    if aunl > self.tracker.get_score(self.component_name, 'aunl'):
+                        print(f"⚠️ No improvement in AUNL ({aunl}/{self.tracker.get_score(self.component_name, 'aunl')})")
+                        print("🛑 Early stopping.")
                         break
+
+                if metric < self.tracker.get_score(self.component_name, 'metric'):
+                    self.tracker.update_aunl(self.component_name, aunl)
+                    self.tracker.update_metric(self.component_name, metric)
+            
 
         # Test evaluation after training
         if self.component_name == self.evaluation_component:

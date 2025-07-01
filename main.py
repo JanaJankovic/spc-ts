@@ -7,22 +7,43 @@ import gc
 import os
 
 EPOCHS = 50
-TRIALS = 50
+TRIALS = 25
 
 DATA_DIR = "data/processed"
 
-def cnn_lstm(data_config):
-    data_config['device'] = 'cuda'
+
+def lstm(data_config):
+    # train_pipeline.train_model(
+    #     'lstm',
+    #     model_fn=lambda config, p: model_handler.get_lstm(config, p),
+    #     data_config=data_config,
+    #     param_sampler=lambda: get_parameters("lstm"),
+    #     trials=TRIALS,
+    #     epochs=EPOCHS,
+    #     early_stopping=False
+    # )
 
     train_pipeline.train_model(
-        'cnn_lstm',
-        model_fn=lambda config, p: model_handler.get_cnn_lstm(config, p),
+        'lstm',
+        model_fn=lambda config, p: model_handler.get_lstm(config, p),
         data_config=data_config,
-        param_sampler=lambda: get_parameters("cnn_lstm"),
+        param_sampler=lambda: get_parameters("lstm"),
         trials=TRIALS,
         epochs=EPOCHS,
-        early_stopping=False
+        early_stopping=True
     )
+
+
+def cnn_lstm(data_config):
+    # train_pipeline.train_model(
+    #     'cnn_lstm',
+    #     model_fn=lambda config, p: model_handler.get_cnn_lstm(config, p),
+    #     data_config=data_config,
+    #     param_sampler=lambda: get_parameters("cnn_lstm"),
+    #     trials=TRIALS,
+    #     epochs=EPOCHS,
+    #     early_stopping=False
+    # )
 
     train_pipeline.train_model(
         'cnn_lstm',
@@ -37,17 +58,15 @@ def cnn_lstm(data_config):
 
 
 def base_residual(data_config):
-    data_config['device'] = 'cuda'
-
-    train_pipeline.train_model(
-        'base_residual',
-        model_fn=lambda config, p: model_handler.get_base_residual(config, p),
-        data_config=data_config,
-        param_sampler=lambda: get_parameters("base_residual"),
-        trials=TRIALS,
-        epochs=EPOCHS,
-        early_stopping=False
-    )
+    # train_pipeline.train_model(
+    #     'base_residual',
+    #     model_fn=lambda config, p: model_handler.get_base_residual(config, p),
+    #     data_config=data_config,
+    #     param_sampler=lambda: get_parameters("base_residual"),
+    #     trials=TRIALS,
+    #     epochs=EPOCHS,
+    #     early_stopping=False
+    # )
 
     train_pipeline.train_model(
         'base_residual',
@@ -62,7 +81,6 @@ def base_residual(data_config):
 
 
 def di_rnn(data_config):
-    data_config['device'] = 'cpu'
     train_pipeline.train_model(
         'di_rnn',
         model_fn=lambda config, p: model_handler.get_di_rnn(config, p),
@@ -85,8 +103,6 @@ def di_rnn(data_config):
 
 
 def cnn_di_rnn(data_config):
-    data_config['device'] = 'cpu'
-
     train_pipeline.train_model(
         'cnn_di_rnn',
         model_fn=lambda config, p: model_handler.get_cnn_di_rnn(config, p),
@@ -109,7 +125,7 @@ def cnn_di_rnn(data_config):
 
 
 if __name__ == "__main__":
-    log.create_logs_files() 
+    #log.create_logs_files() 
 
     data_config = {
         'load_path': '',
@@ -144,15 +160,19 @@ if __name__ == "__main__":
         # torch.cuda.empty_cache(); gc.collect()
 
 
-    # 1 day
-    # data_config['freq'] = '1d'
-    # data_config['lookback'] = 14
-    # for file in mm_files:
-    #     data_config['load_path'] = f'data/processed/{file}'
+    data_config['freq'] = '1d'
+    data_config['lookback'] = 14
+    mm_files = ['mm166942.csv']
 
-    #     cnn_lstm(data_config)
-    #     torch.cuda.empty_cache(); gc.collect()
+    for file in mm_files:
+        data_config['load_path'] = f'data/processed/{file}'
 
-    #     base_residual(data_config)
-    #     torch.cuda.empty_cache(); gc.collect()
+        lstm(data_config)
+        torch.cuda.empty_cache(); gc.collect()
+
+        cnn_lstm(data_config)
+        torch.cuda.empty_cache(); gc.collect()
+
+        base_residual(data_config)
+        torch.cuda.empty_cache(); gc.collect()
 

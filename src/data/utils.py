@@ -5,6 +5,31 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 
+def fill_missing_time(df, datetime_col, method="interpolate"):
+    freq="1h"
+    
+    df = df.copy()
+    df[datetime_col] = pd.to_datetime(df[datetime_col])
+    df = df.set_index(datetime_col)
+
+    # Build new index
+    full_range = pd.date_range(df.index.min(), df.index.max(), freq=freq)
+    df = df.reindex(full_range)
+
+    # Interpolate (default), or fill
+    if method == "interpolate":
+        df = df.interpolate()
+    elif method == "ffill":
+        df = df.ffill()
+    elif method == "bfill":
+        df = df.bfill()
+
+    df = df.reset_index().rename(columns={"index": datetime_col})
+
+    return df
+
+
+
 def load_and_resample(df, time_col, freq="1h", agg="mean"):
     print(
         f"📅 Converting '{time_col}' to datetime and resampling with frequency '{freq}' using '{agg}' aggregation."

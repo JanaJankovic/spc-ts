@@ -22,6 +22,7 @@ def lstm_pipeline(
     freq="1h",
 ):
     df = pd.read_csv(load_path)
+    df = utils.fill_missing_time(df, time_col)
 
     if freq != "1h":
         df = utils.load_and_resample(df, time_col, freq)
@@ -48,6 +49,7 @@ def cnn_lstm_pipeline(
     use_weather=True,
 ):
     df = pd.read_csv(load_path)
+    df = utils.fill_missing_time(df, time_col)
 
     if freq != "1h":
         df = utils.load_and_resample(df, time_col, freq)
@@ -89,8 +91,9 @@ def cnn_lstm_pipeline(
     )
 
 
-def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load"):
+def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load", time_col="datetime"):
     df = pd.read_csv(load_path)
+    df = utils.fill_missing_time(df, time_col)
 
     scaler, train_df, val_df, test_df = utils.scale_uni_data(
         utils.split_dataframe(df, SPLIT_RATIO)
@@ -128,6 +131,8 @@ def base_residual_pipeline(
 ):
 
     df_raw = pd.read_csv(load_path)
+    df_raw = utils.fill_missing_time(df_raw, time_col)
+
     df = utils.load_and_resample(df_raw, time_col, freq)
     df_unsmoothed = df.copy()
     df = utils.smooth_and_clean_target(df, lookback, freq, target_col, time_col)

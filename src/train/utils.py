@@ -5,7 +5,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-
+import numpy as np
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    mean_absolute_percentage_error,
+    r2_score,
+)
+from scipy.stats import spearmanr, ConstantInputWarning
+import warnings
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
@@ -115,6 +123,46 @@ def calculate_aunl(losses, val_losses):
 
     return aunl, aunl_val
 
+
+# === Metric Calculation ===
+def calculate_metrics(scaler, y_true, y_pred, elapsed_time, type="test", scale=True):
+    if scale:
+        y_true = scaler.inverse_transform(y_true)
+        y_pred = scaler.inverse_transform(y_pred)
+
+    y_true = np.array(y_true).flatten()
+    y_pred = np.array(y_pred).flatten()
+
+    mae = mean_absolute_error(y_true, y_pred)
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+    mape = mean_absolute_percentage_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+
+    y_true_diff = np.diff(y_true)
+    y_pred_diff = np.diff(y_pred)
+    mda = np.mean(np.sign(y_true_diff) == np.sign(y_pred_diff))
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=ConstantInputWarning)
+        spearman_corr, _ = spearmanr(y_true, y_pred)
+        if np.isnan(spearman_corr):
+            spearman_corr = 0.0
+
+    return {
+        "model": None,  # to be filled later
+        "model_component": None,
+        "epoch": None,
+        "type": type,
+        "inference": elapsed_time,
+        "MAE": mae,
+        "MSE": mse,
+        "RMSE": rmse,
+        "MAPE": mape,
+        "R2": r2,
+        "MDA": mda,
+        "Spearman": spearman_corr,
+    }
 
 def drop_extra_targets(dataloader):
     # Unpack the (X, y, y_true) tuples into X and y only

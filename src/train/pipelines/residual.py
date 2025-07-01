@@ -5,8 +5,8 @@ from src.logs.utils import log_training_loss, log_evaluation_metrics, log_eval_d
 from src.train.utils import RMSELoss
 from src.train.pipelines.standard import standard_train_pipeline
 import os
-from src.train.utils import calculate_aunl
-from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
+from src.train.utils import calculate_aunl, calculate_metrics
+from src.train.globals import TRACKING_METRIC, MIN_EPOCHS, GlobalTracker
 import numpy as np
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -33,7 +33,7 @@ def compute_residual_dataset(model, data_loader, device):
     return TensorDataset(torch.cat(all_inputs), torch.cat(all_residuals))
 
 
-def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epochs, device, model_name, val_loader, scaler, tracker):
+def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epochs, device, model_name, val_loader, scaler, tracker: GlobalTracker):
     train_loader = DataLoader(residual_dataset, batch_size=batch_size)
     criterion = RMSELoss()
     patience_counter = 0
@@ -74,8 +74,6 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
                 res = res_model(X)
                 combined = base + res
 
-                print("Batch output shape:", combined.shape, "Target shape:", y_true.shape)
-
                 val_loss += criterion(combined, y_true).item()
                 y_pred_val.append(combined.cpu())
                 y_true_val.append(y_true.cpu())
@@ -96,22 +94,26 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
         y_pred_val_np = tensors_to_numpy(y_pred_val)
 
         # Then pass these numpy arrays instead of lists:
+        log_training_loss(epoch, train_losses[-1], val_losses[-1], start_train, end_val, model_name, 'residual')
         log_evaluation_metrics(epoch, y_true_train_np, y_pred_train_np, scaler, "train", end_train - start_train, model_name, "residual")
         log_evaluation_metrics(epoch, y_true_val_np, y_pred_val_np, scaler, "val", end_val - start_val, model_name, "residual")
 
-
-
         # === Early stopping ===
         if early_stopping:
+            metrics = calculate_metrics(scaler, y_true_val_np, y_pred_val_np, 0, '')
+            metric = metrics[TRACKING_METRIC]
             _, aunl = calculate_aunl(train_losses, val_losses)
-            if tracker.update("residual", aunl):
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                print(f"⚠️ No improvement in AUNL ({patience_counter}/{GLOBAL_PATIENCE})")
-                if patience_counter >= GLOBAL_PATIENCE and epoch > MIN_EPOCHS:
+            
+            if epoch > MIN_EPOCHS:
+                if aunl > tracker.get_score('residual', 'aunl'):
+                    print(f"⚠️ No improvement in AUNL ({aunl}/{tracker.get_score('residual', 'aunl')})")
                     print("🛑 Early stopping.")
                     break
+
+            if metric < tracker.get_score('residual', 'metric'):
+                tracker.update_aunl('residual', aunl)
+                tracker.update_metric('residual', metric)
+
 
 
 

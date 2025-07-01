@@ -4,24 +4,26 @@ from src.train.pipelines.modular import train_dirnn_pipeline
 from src.train.pipelines.residual import train_residual_pipeline
 
 
+# Store best AUNL and best metric (use None or inf as default)
 DI_RNN_tracker = {
-    's_rnn': float('inf'),
-    'p_rnn': float('inf'),
-    'bpnn': float('inf'),
+    's_rnn': {'aunl': float('inf'), 'metric': float('inf')},
+    'p_rnn': {'aunl': float('inf'), 'metric': float('inf')},
+    'bpnn': {'aunl': float('inf'), 'metric': float('inf')},
 }
 
 CNN_LSTM_tracker = {
-    'cnn_lstm': float('inf'),
+    'cnn_lstm': {'aunl': float('inf'), 'metric': float('inf')},
 }
 
 LSTM_tracker = {
-    'lstm': float('inf'),
+    'lstm': {'aunl': float('inf'), 'metric': float('inf')},
 }
 
 BASE_RESIDUAL_tracker = {
-    'base': float('inf'),
-    'residual': float('inf'),
+    'base': {'aunl': float('inf'), 'metric': float('inf')},
+    'residual': {'aunl': float('inf'), 'metric': float('inf')},
 }
+
 
 
 def get_training_pipeline(model_type):
