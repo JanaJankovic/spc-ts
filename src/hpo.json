@@ -6,6 +6,7 @@
         "cnn_size": [1, 2, 3, 4],
         "cnn_channel": [8, 16, 32],
         "kernel_size": [2, 4, 6, 8],
+        "residual_layers": [1, 2, 3],
         "dropout": [0.1, 0.2, 0.3],
         "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
         "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
@@ -22,10 +23,10 @@
     },
     "di_rnn": {
         "neurons": [8, 16, 20, 32, 48, 64],
-        "batch_size": [16, 32, 64],
+        "batch_size": [32, 64, 128],
         "dropout": [0.1, 0.2, 0.3],
-        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
-        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+        "learning_rate": [0.01, 0.001, 0.0001],
+        "optimizer": ["adam", "adamw", "adagrad", "nadam"]
     },
     "cnn_lstm": {
         "batch_size": [16, 32, 64],
@@ -38,5 +39,14 @@
         "dropout": [0.1, 0.2, 0.3],
         "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
         "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
+    },
+    "lstm": {
+        "batch_size": [16, 32, 64],
+        "neurons": [8, 16, 20, 32, 48, 64],
+        "lstm_layers": [1, 2, 3, 4],
+        "dropout": [0.1, 0.2, 0.3],
+        "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
+        "optimizer": ["adam", "sgd", "rmsprop", "adamw", "adagrad", "nadam"]
     }
+
 }

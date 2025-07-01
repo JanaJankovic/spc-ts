@@ -1,7 +1,8 @@
 from src.models.cnn_di_rnn import CNN_DIRNN
 from src.models.di_rnn import DIRNN
-from src.models.base_res import BasePredictor, ResidualCNN
+from src.models.base_res import BasePredictor, ResidualRNN
 from src.models.cnn_lstm import CNNLSTMModel
+from src.models.lstm import SimpleLSTM
 import src.data.pipeline as data_pipeline
 import torch.nn as nn
 import torch
@@ -25,10 +26,45 @@ def get_optimizer(name, model_params, lr=1e-3, **kwargs):
         raise ValueError(f"❌ Unknown optimizer: '{name}'")
 
 
+
+def get_lstm(data_config, parameters):
+    batch_size = parameters["batch_size"]
+
+    scaler, data, input_shape = data_pipeline.lstm_pipeline(
+        data_config["load_path"],
+        data_config["lookback"],
+        data_config["horizon"],
+        batch_size,
+        data_config["time_col"],
+        data_config["target_col"],
+        data_config["freq"]
+    )
+
+    model = SimpleLSTM(
+        input_shape=input_shape,
+        output_size=data_config["horizon"],
+        lstm_hidden_size=parameters["lstm_hidden_size"],
+        lstm_layers=parameters["lstm_layers"],
+        dense_size=parameters["dense_size"],
+        dropout_lstm=parameters["dropout_lstm"],
+        dropout_fc=parameters["dropout_fc"],
+    )
+    model.to(data_config['device'])
+
+    optimizer = get_optimizer(
+        parameters["optimizer"], model.parameters(), parameters["learning_rate"]
+    )
+    criterion = nn.L1Loss()
+    
+
+    return scaler, data, model, optimizer, criterion
+
+
+
 def get_cnn_lstm(data_config, parameters):
     batch_size = parameters["batch_size"]
 
-    scalers, data, input_shape = data_pipeline.cnn_lstm_pipeline(
+    scaler, data, input_shape = data_pipeline.cnn_lstm_pipeline(
         data_config["load_path"],
         data_config["lookback"],
         data_config["horizon"],
@@ -60,22 +96,22 @@ def get_cnn_lstm(data_config, parameters):
     criterion = nn.L1Loss()
     
 
-    return scalers, data, model, optimizer, criterion
+    return scaler, data, model, optimizer, criterion
 
 
 def get_base_residual(data_config, parameters):
     batch_size = parameters["batch_size"]
 
-    scalers, data, input_shape = data_pipeline.base_residual_pipeline(
-        data_config["load_path"],
-        data_config["lookback"],
-        data_config["horizon"],
-        batch_size,
-        data_config["time_col"],
-        data_config["target_col"],
-        data_config["freq"],
-        data_config["use_calendar"],
-        data_config["use_weather"],
+    scaler, data, input_shape = data_pipeline.base_residual_pipeline(
+        load_path=data_config["load_path"],
+        lookback=data_config["lookback"],
+        horizon=data_config["horizon"],
+        batch=batch_size,
+        time_col=data_config["time_col"],
+        target_col=data_config["target_col"],
+        freq=data_config["freq"],
+        use_calendar=data_config["use_calendar"],
+        use_weather=data_config["use_weather"],
     )
 
     base_model = BasePredictor(
@@ -90,10 +126,10 @@ def get_base_residual(data_config, parameters):
         dropout_fusion=parameters["dropout_fc"],
     )
 
-    residual_model = ResidualCNN(
-        temporal_dim=input_shape[-1],
-        cnn_channels=parameters["cnn_channels"],
-        kernel_size=parameters["kernel_size"],
+    residual_model = ResidualRNN(
+        input_dim=input_shape[-1],
+        hidden_dim=parameters["hidden_dim"],
+        num_layers=parameters["residual_layers"],
         output_dim=data_config["horizon"],
         dropout=parameters["dropout_cnn"],
     )
@@ -112,7 +148,7 @@ def get_base_residual(data_config, parameters):
 
 
     return (
-        scalers,
+        scaler,
         data,
         (base_model, residual_model),
         (base_optimizer, residual_optimizer),
@@ -126,6 +162,7 @@ def get_di_rnn(data_config, parameters):
         m=data_config["m"],
         n=data_config["n"],
         horizon=data_config["horizon"],
+        batch_size=parameters['batch_size'],
         target_col=data_config["target_col"],
     )
 
@@ -139,16 +176,9 @@ def get_di_rnn(data_config, parameters):
     )
     model.to(data_config['device'])
 
-    optimizers = {
-        "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),
-        "p_rnn": get_optimizer(parameters["optimizer"], model.p_rnn.parameters(), parameters["lr_rnn"]),
-        "bpnn": get_optimizer(parameters["optimizer"], model.bpnn.parameters(), parameters["lr_bpnn"]),
-    }
-
     criterion = nn.L1Loss()
 
-
-    return scaler, data, model, optimizers, criterion
+    return scaler, data, model, criterion
 
 
 def get_cnn_di_rnn(data_config, parameters):
@@ -157,10 +187,12 @@ def get_cnn_di_rnn(data_config, parameters):
         m=data_config["m"],
         n=data_config["n"],
         horizon=data_config["horizon"],
+        batch_size=parameters['batch_size'],
         target_col=data_config["target_col"],
     )
 
-    x_seq, x_per, _ = data[0]  # Get one batch of training data
+    train_loader = data[0]
+    x_seq, x_per, _ = next(iter(train_loader))  # Get one batch
     seq_input_size = x_seq.shape[-1]
     per_input_size = x_per.shape[-1]
 
@@ -176,12 +208,7 @@ def get_cnn_di_rnn(data_config, parameters):
     )
     model.to(data_config['device'])
 
-    optimizers = {
-        "s_rnn": get_optimizer(parameters["optimizer"], model.s_rnn.parameters(), parameters["lr_rnn"]),
-        "p_rnn": get_optimizer(parameters["optimizer"], model.p_rnn.parameters(), parameters["lr_rnn"]),
-        "bpnn": get_optimizer(parameters["optimizer"], model.bpnn.parameters(), parameters["lr_bpnn"]),
-    }
-
     criterion = nn.L1Loss()
 
-    return scaler, data, model, optimizers, criterion
+    return scaler, data, model, criterion
+

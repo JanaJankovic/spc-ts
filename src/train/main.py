@@ -47,4 +47,3 @@ def train_model(
         )
 
     print(f"\n🏁 All trials complete.")
-

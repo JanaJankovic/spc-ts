@@ -127,9 +127,13 @@ def log_evaluation_metrics(epoch, y_true, y_pred, scaler, eval_type, elapsed_tim
     df.to_csv(METRIC_LOG, mode="a", index=False, header=not os.path.exists(METRIC_LOG))
 
 
-def log_eval_data(model_name, scaler, y_true, y_pred, component="main"):
-    y_true = scaler.inverse_transform(y_true)
-    y_pred = scaler.inverse_transform(y_pred)
+def log_eval_data(model_name, scaler, y_true, y_pred, component="main", scale=True):
+    print(scaler.data_min_, scaler.data_max_)
+
+    
+    if scale:
+        y_true = scaler.inverse_transform(y_true)
+        y_pred = scaler.inverse_transform(y_pred)
 
     entry = {
         "model_name": model_name,

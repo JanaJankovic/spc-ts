@@ -2,7 +2,7 @@ import torch
 import os
 import time
 import src.logs.utils as log
-from src.train.utils import calculate_aunl
+from src.train.utils import calculate_aunl, drop_extra_targets
 from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -85,10 +85,16 @@ def standard_train_pipeline(
     scaler, (train_loader, val_loader, test_loader), model, optimizer, criterion = model_fn(
         data_config, params
     )
+
+
+    if len(train_loader.dataset[0]) == 3:
+        train_loader = drop_extra_targets(train_loader)
+        val_loader = drop_extra_targets(val_loader)
+        test_loader = drop_extra_targets(test_loader)
+
+
     model = model if not isinstance(model, tuple) else model[0]
     optimizer = optimizer if not isinstance(optimizer, tuple) else optimizer[0]
-
-    target_scaler = scaler["target"] if isinstance(scaler, dict) else scaler
 
     train_losses, val_losses = [], []
     patience_counter = 0
@@ -131,7 +137,7 @@ def standard_train_pipeline(
             epoch,
             train_targets.numpy(),
             train_preds.numpy(),
-            target_scaler,
+            scaler,
             "train",
             etr - str,
             model_name,
@@ -142,7 +148,7 @@ def standard_train_pipeline(
             epoch,
             val_targets.numpy(),
             val_preds.numpy(),
-            target_scaler,
+            scaler,
             "val",
             evl - svl,
             model_name,
@@ -180,7 +186,7 @@ def standard_train_pipeline(
         epoch,
         test_targets.numpy(),
         test_preds.numpy(),
-        target_scaler,
+        scaler,
         "test",
         ets - sts,
         model_name,
@@ -189,7 +195,7 @@ def standard_train_pipeline(
 
     log.log_eval_data(
         model_name, 
-        target_scaler, 
+        scaler, 
         test_targets.numpy(), 
         test_preds.numpy(),
         model_component, 

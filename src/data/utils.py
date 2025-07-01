@@ -9,6 +9,7 @@ def load_and_resample(df, time_col, freq="1h", agg="mean"):
     print(
         f"📅 Converting '{time_col}' to datetime and resampling with frequency '{freq}' using '{agg}' aggregation."
     )
+    df = df.copy()
     df[time_col] = pd.to_datetime(df[time_col])
     df.set_index(time_col, inplace=True)
     df = df.sort_index()
@@ -142,9 +143,15 @@ def scale_multi_data(data, target_col):
     print(
         f"   Train: {df_train_scaled.shape}, Val: {df_val_scaled.shape}, Test: {df_test_scaled.shape}"
     )
+        # Print the actual min/max of the original target
+    original_y_min = y_train.min().values[0]
+    original_y_max = y_train.max().values[0]
+
+    print(f"📊 Original target range: min={original_y_min:.2f}, max={original_y_max:.2f}")
+    print(f"🎯 Scaler fitted range: min={target_scaler.data_min_[0]:.2f}, max={target_scaler.data_max_[0]:.2f}")
 
     return (
-        {"target": target_scaler, "feature": feature_scaler},
+        target_scaler,
         df_train_scaled,
         df_val_scaled,
         df_test_scaled,
@@ -210,12 +217,12 @@ def build_periodic_sequences(df, lookback, horizon, n):
     return np.array(X_per)
 
 
-
 def smooth_and_clean_target(
     df, lookback, freq="1h", target_col="load", time_col="datetime"
 ):
     print(f"🧼 Smoothing and cleaning target column '{target_col}'...")
 
+    df = df.copy()
     df[time_col] = pd.to_datetime(df[time_col])
     df = df.set_index(time_col).rename(columns={target_col: "cntr"})
 
@@ -223,28 +230,31 @@ def smooth_and_clean_target(
     df = df.resample(freq.lower()).sum().reset_index()
     df["cntr"] = df["cntr"].round(2)
 
-    print(f"📈 Applying {lookback}-window Simple Moving Average...")
-    df["SMA"] = df["cntr"].rolling(window=lookback).mean().bfill()
-
+    # === Step 1: Detect and replace outliers with median ===
     Q1, Q3 = df["cntr"].quantile([0.25, 0.75])
     IQR = Q3 - Q1
-    outliers = (df["cntr"] < (Q1 - 1.5 * IQR)) | (df["cntr"] > (Q3 + 1.5 * IQR))
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = (df["cntr"] < lower_bound) | (df["cntr"] > upper_bound)
     num_outliers = outliers.sum()
 
-    average_max = df["cntr"].nlargest(lookback).mean()
-    df.loc[outliers, "cntr"] = average_max
+    median_val = df["cntr"].median()
+    df.loc[outliers, "cntr"] = median_val
+    print(f"🚫 Replaced {num_outliers} outliers with median value: {median_val:.2f}")
 
-    print(
-        f"🚫 Replaced {num_outliers} outliers with average of top {lookback} values: {average_max:.2f}"
-    )
+    # === Step 2: Apply smoothing after outlier correction ===
+    print(f"📈 Applying {lookback}-window Simple Moving Average...")
+    df["cntr"] = df["cntr"].rolling(window=lookback, min_periods=1).mean()
+
+    # === Step 3: Rename and finish ===
     df = df.rename(columns={"cntr": target_col})
-
     print(f"✅ Target cleaned and ready.")
     return df
 
 
 def add_time_features(df, datetime_col="datetime", holidays=None, include_hour_features=True):
     print(df.columns)
+    df = df.copy()
     df[datetime_col] = pd.to_datetime(df[datetime_col])
 
     df["day_of_week"] = df[datetime_col].dt.dayofweek
@@ -264,64 +274,6 @@ def add_time_features(df, datetime_col="datetime", holidays=None, include_hour_f
         df["is_holiday"] = df[datetime_col].dt.date.isin(holiday_dates).astype(int)
 
     return df
-
-
-def preprocess_weather_data(
-    path,
-    index_col="time",
-    freq="h",
-    drop_threshold=0.15,
-    interpolation="time",
-    limit_direction="both",
-    verbose=False,
-):
-    # Load and parse datetime column
-    df = pd.read_csv(path, parse_dates=[index_col])
-    df.set_index(index_col, inplace=True)
-
-    # Ensure full time range
-    full_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq=freq)
-    df = df.reindex(full_range)
-    df.index.name = index_col
-
-    # Drop columns with too many missing values
-    missing_ratio = df.isna().mean()
-    drop_cols = missing_ratio[missing_ratio > drop_threshold].index.tolist()
-    if verbose and drop_cols:
-        print(
-            f"🧹 Dropping {len(drop_cols)} columns with too much missing data: {drop_cols}"
-        )
-    df = df.drop(columns=drop_cols)
-
-    # Interpolate remaining missing values
-    df = df.interpolate(method=interpolation, limit_direction=limit_direction)
-
-    return df
-
-
-def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="datetime"):
-    # Parse and index the datetime column
-    load_df[timestamp_col] = pd.to_datetime(load_df[timestamp_col])
-    load_df = load_df.set_index(timestamp_col).sort_index()
-
-    # Automatically infer full datetime range
-    start_date = load_df.index.min()
-    end_date = load_df.index.max()
-    full_range = pd.date_range(start=start_date, end=end_date, freq=freq)
-
-    # Reindex and interpolate missing values in load data
-    load_df = load_df.reindex(full_range)
-    load_df = load_df.interpolate(method="time", limit_direction="both")
-    load_df.index.name = timestamp_col
-
-    # Prepare weather_df
-    weather_df.index = pd.to_datetime(weather_df.index)
-    weather_df = weather_df.sort_index()
-
-    # Join on datetime index
-    merged_df = load_df.join(weather_df, how="inner")
-
-    return merged_df.reset_index().rename(columns={"index": timestamp_col})
 
 
 def preprocess_weather_data(
@@ -359,6 +311,35 @@ def preprocess_weather_data(
     return df
 
 
+
+def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="datetime"):
+    # Parse and index the datetime column
+    load_df[timestamp_col] = pd.to_datetime(load_df[timestamp_col])
+    load_df = load_df.set_index(timestamp_col).sort_index()
+
+    # Automatically infer full datetime range
+    start_date = load_df.index.min()
+    end_date = load_df.index.max()
+    full_range = pd.date_range(start=start_date, end=end_date, freq=freq)
+
+    # Reindex and interpolate missing values in load data
+    load_df = load_df.reindex(full_range)
+    load_df = load_df.interpolate(method="time", limit_direction="both")
+    load_df.index.name = timestamp_col
+
+    # Prepare weather_df
+    weather_df.index = pd.to_datetime(weather_df.index)
+    weather_df = weather_df.sort_index()
+
+    # Join on datetime index
+    merged_df = load_df.join(weather_df, how="inner")
+
+    return merged_df.reset_index().rename(columns={"index": timestamp_col})
+
+
+
+
+
 def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="datetime"):
     print("🔗 Joining load and weather data...")
 
@@ -389,72 +370,92 @@ def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="date
 def get_data_loaders(
     df,
     lookback,
-    freq,
     horizon,
     batch_size,
     split_ratio,
     target_col="load",
     uni=True,
+    df_raw=None,  # optional: use for raw target scaler + unscaled y_true
 ):
     print("📦 Starting data loader preparation...")
-    scalers = {"target": None, "feature": None}
 
+    use_raw_scaler = df_raw is not None
+    target_scaler = None
+
+    # === Handle optional raw scaler and y_true ===
+    if use_raw_scaler:
+        print("🎯 Splitting raw data and fitting scaler only on train set to avoid leakage...")
+        df_raw_train, df_raw_val, df_raw_test = split_dataframe(df_raw, split_ratio)
+
+        target_scaler = MinMaxScaler()
+        target_scaler.fit(df_raw_train[[target_col]])
+    else:
+        df_raw_train = df_raw_val = df_raw_test = None
+
+    # === Scaling and split ===
     if uni:
         print("🔄 Using univariate scaling...")
-        scaler, train_df, val_df, test_df = scale_uni_data(
-            split_dataframe(df, split_ratio)
-        )
-        scalers["target"] = scaler
+        scaler, train_df, val_df, test_df = scale_uni_data(split_dataframe(df, split_ratio))
     else:
         print("🔄 Using multivariate scaling with one-hot encoding...")
         calendar_cols = [
-            "day_of_week",
-            "month",
-            "is_weekend",
-            "hour",
-            "is_night",
-            "is_holiday",
+            "day_of_week", "month", "is_weekend", "hour", "is_night", "is_holiday"
         ]
         df = one_hot_encode_columns(df, calendar_cols, drop_first=True)
-        scalers, train_df, val_df, test_df = scale_multi_data(
-            split_dataframe(df, split_ratio), target_col
-        )
+        scaler, train_df, val_df, test_df = scale_multi_data(split_dataframe(df, split_ratio), target_col)
 
+    # === Sequences ===
     print("🔧 Building traditional sequences...")
-    X_train, y_train = build_traditional_sequences(
-        train_df, lookback, horizon, target_col
-    )
+    X_train, y_train = build_traditional_sequences(train_df, lookback, horizon, target_col)
     X_val, y_val = build_traditional_sequences(val_df, lookback, horizon, target_col)
     X_test, y_test = build_traditional_sequences(test_df, lookback, horizon, target_col)
 
-    print(f"📐 Shapes - X_train: {X_train.shape}, y_train: {y_train.shape}")
-    print(f"📐 Shapes - X_val:   {X_val.shape}, y_val:   {y_val.shape}")
-    print(f"📐 Shapes - X_test:  {X_test.shape}, y_test:  {y_test.shape}")
+    # === Raw target values (optional, from unscaled df_raw) ===
+    if use_raw_scaler:
+        print("📎 Extracting and scaling raw unscaled targets for each set...")
+        _, y_train_true = build_traditional_sequences(df_raw_train, lookback, horizon, target_col)
+        _, y_val_true = build_traditional_sequences(df_raw_val, lookback, horizon, target_col)
+        _, y_test_true = build_traditional_sequences(df_raw_test, lookback, horizon, target_col)
 
-    X_train = torch.tensor(X_train, dtype=torch.float32)
-    y_train = torch.tensor(y_train, dtype=torch.float32)
-    X_val = torch.tensor(X_val, dtype=torch.float32)
-    y_val = torch.tensor(y_val, dtype=torch.float32)
-    X_test = torch.tensor(X_test, dtype=torch.float32)
-    y_test = torch.tensor(y_test, dtype=torch.float32)
+        # === Scale raw targets using target_scaler ===
+        def scale_y_true(y_arr):
+            return target_scaler.transform(y_arr.reshape(-1, 1)).reshape(y_arr.shape)
 
+        y_train_true = scale_y_true(y_train_true)
+        y_val_true = scale_y_true(y_val_true)
+        y_test_true = scale_y_true(y_test_true)
+
+    # === Torch Tensors ===
+    def to_tensor(arr): return torch.tensor(arr, dtype=torch.float32)
+    X_train, y_train = to_tensor(X_train), to_tensor(y_train)
+    X_val, y_val = to_tensor(X_val), to_tensor(y_val)
+    X_test, y_test = to_tensor(X_test), to_tensor(y_test)
+
+    if use_raw_scaler:
+        y_train_true = to_tensor(y_train_true)
+        y_val_true = to_tensor(y_val_true)
+        y_test_true = to_tensor(y_test_true)
+
+    # === DataLoaders ===
     print("📤 Creating DataLoaders...")
-    train_loader = DataLoader(
-        TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=False
-    )
-    val_loader = DataLoader(
-        TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False
-    )
-    test_loader = DataLoader(
-        TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False
-    )
+    if use_raw_scaler:
+        train_loader = DataLoader(TensorDataset(X_train, y_train, y_train_true), batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(TensorDataset(X_val, y_val, y_val_true), batch_size=batch_size, shuffle=False)
+        test_loader = DataLoader(TensorDataset(X_test, y_test, y_test_true), batch_size=batch_size, shuffle=False)
+    else:
+        train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=False)
+        val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False)
+        test_loader = DataLoader(TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False)
 
     print("✅ DataLoaders ready.")
     return (
-        scalers,
+        target_scaler if use_raw_scaler else scaler,
         (train_loader, val_loader, test_loader),
         X_train.shape[1:],
     )
+
+
+
 
 
 def to_loader(X_s, X_p, y, batch_size):

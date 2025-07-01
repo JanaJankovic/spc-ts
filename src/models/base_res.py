@@ -62,33 +62,25 @@ class BasePredictor(nn.Module):
 
 
 # === Residual CNN ===
-class ResidualCNN(nn.Module):
-    def __init__(
-        self, temporal_dim, cnn_channels=16, kernel_size=3, output_dim=1, dropout=0.2
-    ):
+class ResidualRNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim=32, num_layers=1, output_dim=1, dropout=0.2):
         super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(
-                in_channels=temporal_dim,
-                out_channels=cnn_channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-            ),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Conv1d(
-                in_channels=cnn_channels,
-                out_channels=cnn_channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-            ),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Conv1d(in_channels=cnn_channels, out_channels=output_dim, kernel_size=1),
+        self.rnn = nn.LSTM(
+            input_dim,
+            hidden_dim,
+            num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0  # dropout applied between layers if stacked LSTM
         )
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        
+    def forward(self, x):
+        # x: [batch, seq_len, features]
+        out, _ = self.rnn(x)
+        out = out[:, -1, :]  # take last time step output
+        out = self.dropout(out)
+        out = self.fc(out)
+        return out
 
-    def forward(self, x_temporal):
-        x = x_temporal.permute(0, 2, 1)  # [B, F, T]
-        x = self.cnn(x)
-        x = x.mean(dim=2)
-        return x.squeeze(-1)
+

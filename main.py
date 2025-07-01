@@ -128,31 +128,31 @@ if __name__ == "__main__":
     mm_files = [f for f in os.listdir(DATA_DIR) if f.startswith("mm") and f.endswith(".csv")]
     
     # 1 hour
-    for file in mm_files:
-        data_config['load_path'] = f'data/processed/{file}'
+    # for file in mm_files:
+    #     data_config['load_path'] = f'data/processed/{file}'
 
-        cnn_lstm(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+    #     cnn_lstm(data_config)
+    #     torch.cuda.empty_cache(); gc.collect()
 
-        base_residual(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+    #     base_residual(data_config)
+    #     torch.cuda.empty_cache(); gc.collect()
 
-        di_rnn(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+        # di_rnn(data_config)
+        # torch.cuda.empty_cache(); gc.collect()
 
-        cnn_di_rnn(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+        # cnn_di_rnn(data_config)
+        # torch.cuda.empty_cache(); gc.collect()
 
 
     # 1 day
-    data_config['freq'] = '1d'
-    data_config['lookback'] = 14
-    for file in mm_files:
-        data_config['load_path'] = f'data/processed/{file}'
+    # data_config['freq'] = '1d'
+    # data_config['lookback'] = 14
+    # for file in mm_files:
+    #     data_config['load_path'] = f'data/processed/{file}'
 
-        cnn_lstm(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+    #     cnn_lstm(data_config)
+    #     torch.cuda.empty_cache(); gc.collect()
 
-        base_residual(data_config)
-        torch.cuda.empty_cache(); gc.collect()
+    #     base_residual(data_config)
+    #     torch.cuda.empty_cache(); gc.collect()
 

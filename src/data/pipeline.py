@@ -12,6 +12,30 @@ WEATHER_PATH = os.path.join(DATA_DIR, "slovenia_weather.csv")
 SPLIT_RATIO = (0.6, 0.1, 0.3)
 
 
+def lstm_pipeline(
+    load_path,
+    lookback,
+    horizon,
+    batch,
+    time_col="datetime",
+    target_col="load",
+    freq="1h",
+):
+    df = pd.read_csv(load_path)
+
+    if freq != "1h":
+        df = utils.load_and_resample(df, time_col, freq)
+
+    return utils.get_data_loaders(
+        df,
+        lookback,
+        horizon,
+        batch,
+        SPLIT_RATIO,
+        uni=True,
+        target_col=target_col,
+    )
+
 def cnn_lstm_pipeline(
     load_path,
     lookback,
@@ -47,7 +71,6 @@ def cnn_lstm_pipeline(
         return utils.get_data_loaders(
             df,
             lookback,
-            freq,
             horizon,
             batch,
             SPLIT_RATIO,
@@ -58,7 +81,6 @@ def cnn_lstm_pipeline(
     return utils.get_data_loaders(
         df,
         lookback,
-        freq,
         horizon,
         batch,
         SPLIT_RATIO,
@@ -104,7 +126,10 @@ def base_residual_pipeline(
     use_calendar=True,
     use_weather=True,
 ):
-    df = pd.read_csv(load_path)
+
+    df_raw = pd.read_csv(load_path)
+    df = utils.load_and_resample(df_raw, time_col, freq)
+    df_unsmoothed = df.copy()
     df = utils.smooth_and_clean_target(df, lookback, freq, target_col, time_col)
 
     if use_calendar:
@@ -124,21 +149,21 @@ def base_residual_pipeline(
         return utils.get_data_loaders(
             df,
             lookback,
-            freq,
             horizon,
             batch,
             SPLIT_RATIO,
             uni=True,
             target_col=target_col,
+            df_raw=df_unsmoothed
         )
 
     return utils.get_data_loaders(
         df,
         lookback,
-        freq,
         horizon,
         batch,
         SPLIT_RATIO,
         uni=False,
         target_col=target_col,
+        df_raw=df_unsmoothed
     )

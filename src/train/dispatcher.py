@@ -14,6 +14,10 @@ CNN_LSTM_tracker = {
     'cnn_lstm': float('inf'),
 }
 
+LSTM_tracker = {
+    'lstm': float('inf'),
+}
+
 BASE_RESIDUAL_tracker = {
     'base': float('inf'),
     'residual': float('inf'),
@@ -21,10 +25,13 @@ BASE_RESIDUAL_tracker = {
 
 
 def get_training_pipeline(model_type):
+    if model_type == "lstm":
+        return standard_train_pipeline, GlobalTracker(LSTM_tracker)
     if model_type == "cnn_lstm":
         return standard_train_pipeline, GlobalTracker(CNN_LSTM_tracker)
     elif model_type == "di_rnn" or model_type == "cnn_di_rnn":
         return train_dirnn_pipeline, GlobalTracker(DI_RNN_tracker)
     elif model_type == "base_residual":
         return train_residual_pipeline, GlobalTracker(BASE_RESIDUAL_tracker)
+    
 

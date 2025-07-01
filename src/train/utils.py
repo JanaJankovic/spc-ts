@@ -4,6 +4,8 @@ import random
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
@@ -27,13 +29,24 @@ def get_parameters(model_name):
         p["dropout_rnn"] = random.choice(s["dropout"])
         p["dropout_fc"] = random.choice(s["dropout"])
         p["dropout_cnn"] = random.choice(s["dropout"])
-        p["cnn_channels"] = random.choice(s["cnn_channel"])
+        p["cnn_channels"] = random.choices(s["cnn_channel"], k=random.choice(s["cnn_size"]))
+        p["residual_layers"] = random.choice(s["residual_layers"])
+        p["hidden_dim"] = random.choice(s["neurons"])
         p["learning_rate"] = random.choice(s["learning_rate"])
         p["kernel_size"] = random.choice(s["kernel_size"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
         p["use_lstm"] = random.choice(s["use_lstm"])
 
+    elif model_name == "lstm":
+        p["lstm_hidden_size"] = random.choice(s["neurons"])
+        p["lstm_layers"] = random.choice(s["lstm_layers"])
+        p["dense_size"] = random.choice(s["neurons"])
+        p["dropout_lstm"] = random.choice(s["dropout"])
+        p["dropout_fc"] = random.choice(s["dropout"])
+        p["learning_rate"] = random.choice(s["learning_rate"])
+        p["optimizer"] = random.choice(s["optimizer"])
+        p["batch_size"] = random.choice(s["batch_size"])
 
     elif model_name == "cnn_lstm":
         p["cnn_channels"] = random.choices(s["cnn_channel"], k=random.choice(s["cnn_size"]))
@@ -48,9 +61,6 @@ def get_parameters(model_name):
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
 
-
-
-
     elif model_name == "di_rnn":
         p["hidden_size"] = random.choice(s["neurons"])
         p["bp_hidden_size"] = random.choice(s["neurons"])
@@ -59,8 +69,6 @@ def get_parameters(model_name):
         p["lr_bpnn"] = random.choice(s["learning_rate"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
-
-
 
     elif model_name == "cnn_di_rnn":
         p["hidden_size"] = random.choice(s["neurons"])
@@ -72,8 +80,6 @@ def get_parameters(model_name):
         p["kernel_size"] = random.choice(s["kernel_size"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
-
-
     else:
         raise ValueError(f"⚠️ No sampling logic defined for model '{model_name}'.")
 
@@ -110,6 +116,21 @@ def calculate_aunl(losses, val_losses):
     return aunl, aunl_val
 
 
+def drop_extra_targets(dataloader):
+    # Unpack the (X, y, y_true) tuples into X and y only
+    dataset = dataloader.dataset
+    two_tensor_list = [ (x, y) for (x, y, _) in dataset ]
+    
+    # Stack all data along axis 0 to create new tensors
+    X = torch.stack([x for (x, y) in two_tensor_list])
+    y = torch.stack([y for (x, y) in two_tensor_list])
+
+    return DataLoader(
+        dataset=TensorDataset(X, y),
+        batch_size=dataloader.batch_size,
+        shuffle=False,
+        drop_last=False,
+    )
 
 class RMSELoss(nn.Module):
     def __init__(self, eps=1e-8):
