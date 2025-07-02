@@ -3,11 +3,12 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+import os
 
 
 def fill_missing_time(df, datetime_col, method="interpolate"):
     freq = "1h"
-    
+
     df = df.copy()
     df[datetime_col] = pd.to_datetime(df[datetime_col])
     df = df.set_index(datetime_col)
@@ -33,8 +34,6 @@ def fill_missing_time(df, datetime_col, method="interpolate"):
     return df
 
 
-
-
 def load_and_resample(df, time_col, freq="1h", agg="mean"):
     print(
         f"📅 Converting '{time_col}' to datetime and resampling with frequency '{freq}' using '{agg}' aggregation."
@@ -49,7 +48,6 @@ def load_and_resample(df, time_col, freq="1h", agg="mean"):
 
     print(f"✅ Resampling complete. Resulting shape: {df_resampled.shape}")
     return df_resampled
-
 
 
 def split_dataframe(df, splits):
@@ -173,12 +171,16 @@ def scale_multi_data(data, target_col):
     print(
         f"   Train: {df_train_scaled.shape}, Val: {df_val_scaled.shape}, Test: {df_test_scaled.shape}"
     )
-        # Print the actual min/max of the original target
+    # Print the actual min/max of the original target
     original_y_min = y_train.min().values[0]
     original_y_max = y_train.max().values[0]
 
-    print(f"📊 Original target range: min={original_y_min:.2f}, max={original_y_max:.2f}")
-    print(f"🎯 Scaler fitted range: min={target_scaler.data_min_[0]:.2f}, max={target_scaler.data_max_[0]:.2f}")
+    print(
+        f"📊 Original target range: min={original_y_min:.2f}, max={original_y_max:.2f}"
+    )
+    print(
+        f"🎯 Scaler fitted range: min={target_scaler.data_min_[0]:.2f}, max={target_scaler.data_max_[0]:.2f}"
+    )
 
     return (
         target_scaler,
@@ -214,7 +216,9 @@ def build_traditional_sequences(df, lookback, horizon, target_col="load"):
 
 
 def build_periodic_sequences(df, lookback, horizon, n):
-    print(f"⚡ Building periodic inputs aligned with traditional sequences (lookback={lookback}, horizon={horizon}, n={n})")
+    print(
+        f"⚡ Building periodic inputs aligned with traditional sequences (lookback={lookback}, horizon={horizon}, n={n})"
+    )
 
     values = df.values  # shape (T, features)
     total_len = len(values)
@@ -282,7 +286,9 @@ def smooth_and_clean_target(
     return df
 
 
-def add_time_features(df, datetime_col="datetime", holidays=None, include_hour_features=True):
+def add_time_features(
+    df, datetime_col="datetime", holidays=None, include_hour_features=True
+):
     print(df.columns)
     df = df.copy()
     df[datetime_col] = pd.to_datetime(df[datetime_col])
@@ -341,7 +347,6 @@ def preprocess_weather_data(
     return df
 
 
-
 def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="datetime"):
     # Parse and index the datetime column
     load_df[timestamp_col] = pd.to_datetime(load_df[timestamp_col])
@@ -365,9 +370,6 @@ def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="date
     merged_df = load_df.join(weather_df, how="inner")
 
     return merged_df.reset_index().rename(columns={"index": timestamp_col})
-
-
-
 
 
 def join_calendar_and_weather(load_df, weather_df, freq="h", timestamp_col="datetime"):
@@ -414,7 +416,9 @@ def get_data_loaders(
 
     # === Handle optional raw scaler and y_true ===
     if use_raw_scaler:
-        print("🎯 Splitting raw data and fitting scaler only on train set to avoid leakage...")
+        print(
+            "🎯 Splitting raw data and fitting scaler only on train set to avoid leakage..."
+        )
         df_raw_train, df_raw_val, df_raw_test = split_dataframe(df_raw, split_ratio)
 
         target_scaler = MinMaxScaler()
@@ -425,27 +429,44 @@ def get_data_loaders(
     # === Scaling and split ===
     if uni:
         print("🔄 Using univariate scaling...")
-        scaler, train_df, val_df, test_df = scale_uni_data(split_dataframe(df, split_ratio))
+        scaler, train_df, val_df, test_df = scale_uni_data(
+            split_dataframe(df, split_ratio)
+        )
     else:
         print("🔄 Using multivariate scaling with one-hot encoding...")
         calendar_cols = [
-            "day_of_week", "month", "is_weekend", "hour", "is_night", "is_holiday"
+            "day_of_week",
+            "month",
+            "is_weekend",
+            "hour",
+            "is_night",
+            "is_holiday",
         ]
         df = one_hot_encode_columns(df, calendar_cols, drop_first=True)
-        scaler, train_df, val_df, test_df = scale_multi_data(split_dataframe(df, split_ratio), target_col)
+        scaler, train_df, val_df, test_df = scale_multi_data(
+            split_dataframe(df, split_ratio), target_col
+        )
 
     # === Sequences ===
     print("🔧 Building traditional sequences...")
-    X_train, y_train = build_traditional_sequences(train_df, lookback, horizon, target_col)
+    X_train, y_train = build_traditional_sequences(
+        train_df, lookback, horizon, target_col
+    )
     X_val, y_val = build_traditional_sequences(val_df, lookback, horizon, target_col)
     X_test, y_test = build_traditional_sequences(test_df, lookback, horizon, target_col)
 
     # === Raw target values (optional, from unscaled df_raw) ===
     if use_raw_scaler:
         print("📎 Extracting and scaling raw unscaled targets for each set...")
-        _, y_train_true = build_traditional_sequences(df_raw_train, lookback, horizon, target_col)
-        _, y_val_true = build_traditional_sequences(df_raw_val, lookback, horizon, target_col)
-        _, y_test_true = build_traditional_sequences(df_raw_test, lookback, horizon, target_col)
+        _, y_train_true = build_traditional_sequences(
+            df_raw_train, lookback, horizon, target_col
+        )
+        _, y_val_true = build_traditional_sequences(
+            df_raw_val, lookback, horizon, target_col
+        )
+        _, y_test_true = build_traditional_sequences(
+            df_raw_test, lookback, horizon, target_col
+        )
 
         # === Scale raw targets using target_scaler ===
         def scale_y_true(y_arr):
@@ -456,7 +477,9 @@ def get_data_loaders(
         y_test_true = scale_y_true(y_test_true)
 
     # === Torch Tensors ===
-    def to_tensor(arr): return torch.tensor(arr, dtype=torch.float32)
+    def to_tensor(arr):
+        return torch.tensor(arr, dtype=torch.float32)
+
     X_train, y_train = to_tensor(X_train), to_tensor(y_train)
     X_val, y_val = to_tensor(X_val), to_tensor(y_val)
     X_test, y_test = to_tensor(X_test), to_tensor(y_test)
@@ -469,13 +492,31 @@ def get_data_loaders(
     # === DataLoaders ===
     print("📤 Creating DataLoaders...")
     if use_raw_scaler:
-        train_loader = DataLoader(TensorDataset(X_train, y_train, y_train_true), batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(TensorDataset(X_val, y_val, y_val_true), batch_size=batch_size, shuffle=False)
-        test_loader = DataLoader(TensorDataset(X_test, y_test, y_test_true), batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(
+            TensorDataset(X_train, y_train, y_train_true),
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        val_loader = DataLoader(
+            TensorDataset(X_val, y_val, y_val_true),
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        test_loader = DataLoader(
+            TensorDataset(X_test, y_test, y_test_true),
+            batch_size=batch_size,
+            shuffle=False,
+        )
     else:
-        train_loader = DataLoader(TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=False)
-        val_loader = DataLoader(TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False)
-        test_loader = DataLoader(TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(
+            TensorDataset(X_train, y_train), batch_size=batch_size, shuffle=False
+        )
+        val_loader = DataLoader(
+            TensorDataset(X_val, y_val), batch_size=batch_size, shuffle=False
+        )
+        test_loader = DataLoader(
+            TensorDataset(X_test, y_test), batch_size=batch_size, shuffle=False
+        )
 
     print("✅ DataLoaders ready.")
     return (
@@ -485,11 +526,114 @@ def get_data_loaders(
     )
 
 
-
-
-
 def to_loader(X_s, X_p, y, batch_size):
     X_s = torch.tensor(X_s, dtype=torch.float32)
     X_p = torch.tensor(X_p, dtype=torch.float32)
     y = torch.tensor(y, dtype=torch.float32)
     return DataLoader(TensorDataset(X_s, X_p, y), batch_size=batch_size, shuffle=False)
+
+
+def stack_dataframes_long(load_dir, time_col, freq):
+    files = [
+        f for f in os.listdir(load_dir) if f.startswith("mm") and f.endswith(".csv")
+    ]
+    lengths = []
+    temp_dfs = []
+
+    # First pass: get lengths for all
+    for idx, fname in enumerate(sorted(files)):
+        fpath = os.path.join(load_dir, fname)
+        df = pd.read_csv(fpath)
+        df = fill_missing_time(df, time_col)
+        df = load_and_resample(df, time_col, freq)
+        lengths.append(len(df))
+        temp_dfs.append((idx, df))
+
+    # Compute median and find indices above or equal to median
+    lengths = np.array(lengths)
+    median_length = int(np.median(lengths))
+    keep_idx = [i for i, l in enumerate(lengths) if l >= median_length]
+
+    print(f"Dataset lengths: {lengths}")
+    print(f"Median length: {median_length}")
+    print(f"Keeping consumers: {keep_idx}")
+
+    # Only include those with sufficient length; add consumer_id, select cols
+    long_dfs = []
+    for idx, df in temp_dfs:
+        if idx in keep_idx:
+            df = df.copy()
+            df["consumer_id"] = idx
+            long_dfs.append(df[[time_col, "load", "consumer_id"]])
+
+    # Concatenate all into long format
+    big_df = pd.concat(long_dfs, ignore_index=True)
+    print(f"Shape after stacking (long format): {big_df.shape}")
+    print(big_df.head())
+
+    return big_df, median_length
+
+
+def get_universal_data_loaders(
+    df,
+    lookback,
+    horizon,
+    batch_size,
+    split_ratio,
+    time_col="datetime",
+    target_col="load",
+    consumer_col="consumer_id",
+):
+    print("📦 Starting universal data loader preparation (long format)...")
+
+    consumer_scalers = {}
+    all_X, all_y, all_ids, split_labels = [], [], [], []
+
+    for cid, sub_df in df.groupby(consumer_col):
+        arr = sub_df.sort_values(time_col)[target_col].values.reshape(-1, 1)
+        n = len(arr)
+        train_end = int(n * split_ratio[0])
+        val_end = train_end + int(n * split_ratio[1])
+        # Fit scaler on *train* part ONLY
+        scaler = MinMaxScaler()
+        scaler.fit(arr[:train_end])
+        consumer_scalers[cid] = scaler
+
+        # Transform splits with the *train-fitted* scaler
+        splits = {
+            "train": scaler.transform(arr[:train_end]),
+            "val": scaler.transform(arr[train_end:val_end]),
+            "test": scaler.transform(arr[val_end:]),
+        }
+        split_starts = {"train": 0, "val": train_end, "test": val_end}
+
+        for split_name, split_arr in splits.items():
+            for i in range(len(split_arr) - lookback - horizon + 1):
+                X = split_arr[i : i + lookback, 0]
+                y = split_arr[i + lookback : i + lookback + horizon, 0]
+                all_X.append(X)
+                all_y.append(y)
+                all_ids.append(cid)
+                split_labels.append(split_name)
+
+    # Convert to arrays/tensors
+    X_all = torch.tensor(np.stack(all_X), dtype=torch.float32)
+    y_all = torch.tensor(np.stack(all_y), dtype=torch.float32)
+    ids_all = torch.tensor(np.array(all_ids), dtype=torch.long)
+    split_labels = np.array(split_labels)
+
+    # Now, create split indices by split_labels
+    train_idx = np.where(split_labels == "train")[0]
+    val_idx = np.where(split_labels == "val")[0]
+    test_idx = np.where(split_labels == "test")[0]
+
+    train_ds = TensorDataset(X_all[train_idx], y_all[train_idx], ids_all[train_idx])
+    val_ds = TensorDataset(X_all[val_idx], y_all[val_idx], ids_all[val_idx])
+    test_ds = TensorDataset(X_all[test_idx], y_all[test_idx], ids_all[test_idx])
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+
+    print("✅ Universal DataLoaders ready (no data leakage).")
+    return consumer_scalers, (train_loader, val_loader, test_loader), X_all.shape[1:]

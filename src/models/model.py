@@ -26,7 +26,6 @@ def get_optimizer(name, model_params, lr=1e-3, **kwargs):
         raise ValueError(f"❌ Unknown optimizer: '{name}'")
 
 
-
 def get_lstm(data_config, parameters):
     batch_size = parameters["batch_size"]
 
@@ -37,7 +36,7 @@ def get_lstm(data_config, parameters):
         batch_size,
         data_config["time_col"],
         data_config["target_col"],
-        data_config["freq"]
+        data_config["freq"],
     )
 
     model = SimpleLSTM(
@@ -49,16 +48,14 @@ def get_lstm(data_config, parameters):
         dropout_lstm=parameters["dropout_lstm"],
         dropout_fc=parameters["dropout_fc"],
     )
-    model.to(data_config['device'])
+    model.to(data_config["device"])
 
     optimizer = get_optimizer(
         parameters["optimizer"], model.parameters(), parameters["learning_rate"]
     )
     criterion = nn.L1Loss()
-    
 
     return scaler, data, model, optimizer, criterion
-
 
 
 def get_cnn_lstm(data_config, parameters):
@@ -88,13 +85,12 @@ def get_cnn_lstm(data_config, parameters):
         dropout_conv=parameters["dropout_cnn"],
         dropout_fc=parameters["dropout_fc"],
     )
-    model.to(data_config['device'])
+    model.to(data_config["device"])
 
     optimizer = get_optimizer(
         parameters["optimizer"], model.parameters(), parameters["learning_rate"]
     )
     criterion = nn.L1Loss()
-    
 
     return scaler, data, model, optimizer, criterion
 
@@ -133,8 +129,8 @@ def get_base_residual(data_config, parameters):
         output_dim=data_config["horizon"],
         dropout=parameters["dropout_cnn"],
     )
-    base_model.to(data_config['device'])
-    residual_model.to(data_config['device'])
+    base_model.to(data_config["device"])
+    residual_model.to(data_config["device"])
 
     base_optimizer = get_optimizer(
         parameters["optimizer"], base_model.parameters(), parameters["learning_rate"]
@@ -145,7 +141,6 @@ def get_base_residual(data_config, parameters):
         parameters["learning_rate"],
     )
     criterion = nn.L1Loss()
-
 
     return (
         scaler,
@@ -162,7 +157,7 @@ def get_di_rnn(data_config, parameters):
         m=data_config["m"],
         n=data_config["n"],
         horizon=data_config["horizon"],
-        batch_size=parameters['batch_size'],
+        batch_size=parameters["batch_size"],
         target_col=data_config["target_col"],
     )
 
@@ -174,7 +169,7 @@ def get_di_rnn(data_config, parameters):
         dropout=parameters["dropout_rnn"],
         horizon=data_config["horizon"],
     )
-    model.to(data_config['device'])
+    model.to(data_config["device"])
 
     criterion = nn.L1Loss()
 
@@ -187,7 +182,7 @@ def get_cnn_di_rnn(data_config, parameters):
         m=data_config["m"],
         n=data_config["n"],
         horizon=data_config["horizon"],
-        batch_size=parameters['batch_size'],
+        batch_size=parameters["batch_size"],
         target_col=data_config["target_col"],
     )
 
@@ -206,27 +201,63 @@ def get_cnn_di_rnn(data_config, parameters):
         cnn_out_channels=parameters["cnn_channels"],
         kernel_size=parameters["kernel_size"],
     )
-    model.to(data_config['device'])
+    model.to(data_config["device"])
 
     criterion = nn.L1Loss()
 
     return scaler, data, model, criterion
 
 
+def get_universal(data_config, parameters):
+    batch_size = parameters["batch_size"]
+
+    scalers, data, input_shape = data_pipeline.uni_model_pipeline(
+        data_config["load_path"],
+        data_config["lookback"],
+        data_config["horizon"],
+        batch_size,
+        data_config["time_col"],
+        data_config["target_col"],
+        data_config["freq"],
+    )
+
+    model = CNNLSTMModel(
+        input_shape=input_shape,
+        output_size=data_config["horizon"],
+        conv_channels=parameters["cnn_channels"],
+        kernel_size=parameters["kernel_size"],
+        use_maxpool=parameters["use_maxpool"],
+        lstm_hidden_size=parameters["lstm_hidden_size"],
+        lstm_layers=parameters["lstm_layers"],
+        dense_size=parameters["dense_size"],
+        dropout_conv=parameters["dropout_cnn"],
+        dropout_fc=parameters["dropout_fc"],
+    )
+    model.to(data_config["device"])
+
+    optimizer = get_optimizer(
+        parameters["optimizer"], model.parameters(), parameters["learning_rate"]
+    )
+    criterion = nn.L1Loss()
+
+    return scalers, data, model, optimizer, criterion
+
+
 def get_model_fn(model_type):
-    if model_type == 'cnn_lstm':
+    if model_type == "cnn_lstm":
         return get_cnn_lstm
-    elif model_type == 'lstm':
+    elif model_type == "lstm":
         return get_lstm
-    elif model_type == 'di_rnn':
+    elif model_type == "di_rnn":
         return get_di_rnn
-    elif model_type == 'cnn_di_rnn':
+    elif model_type == "cnn_di_rnn":
         return get_cnn_di_rnn
-    elif model_type == 'base_residual':
+    elif model_type == "base_residual":
         return get_base_residual
+    elif model_type == "universal":
+        return get_universal
     else:
         raise ValueError(f"❌ Unknown model type: '{model_type}'")
-    
 
 
 def get_model_component_names(model_type, component):
@@ -234,17 +265,23 @@ def get_model_component_names(model_type, component):
         if component in ["dense", "dense_cnn"]:
             return ["fc2"]
         else:
-            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+            raise ValueError(
+                f"Unknown component '{component}' for model_type '{model_type}'"
+            )
     elif model_type == "di_rnn":
         if component in ["dense", "dense_cnn"]:
             return ["bpnn.fc2"]
         else:
-            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+            raise ValueError(
+                f"Unknown component '{component}' for model_type '{model_type}'"
+            )
     elif model_type == "base_residual":
         if component in ["dense", "dense_cnn"]:
             return ["fc"]
         else:
-            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+            raise ValueError(
+                f"Unknown component '{component}' for model_type '{model_type}'"
+            )
     elif model_type == "cnn_lstm":
         if component == "dense":
             return ["fc2"]
@@ -253,7 +290,9 @@ def get_model_component_names(model_type, component):
         elif component == "dense_cnn":
             return [f"convs.{i}" for i in range(3)] + ["fc2"]
         else:
-            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+            raise ValueError(
+                f"Unknown component '{component}' for model_type '{model_type}'"
+            )
     elif model_type == "cnn_di_rnn":
         if component == "dense":
             return ["bpnn.fc2"]
@@ -262,6 +301,8 @@ def get_model_component_names(model_type, component):
         elif component == "dense_cnn":
             return ["cnn_seq", "cnn_per", "bpnn.fc2"]
         else:
-            raise ValueError(f"Unknown component '{component}' for model_type '{model_type}'")
+            raise ValueError(
+                f"Unknown component '{component}' for model_type '{model_type}'"
+            )
     else:
         raise ValueError(f"Unknown model_type: {model_type}")

@@ -37,6 +37,7 @@ def lstm_pipeline(
         target_col=target_col,
     )
 
+
 def cnn_lstm_pipeline(
     load_path,
     lookback,
@@ -91,7 +92,9 @@ def cnn_lstm_pipeline(
     )
 
 
-def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load", time_col="datetime"):
+def di_rnn_pipeline(
+    load_path, m, n, horizon, batch_size, target_col="load", time_col="datetime"
+):
     df = pd.read_csv(load_path)
     df = utils.fill_missing_time(df, time_col)
 
@@ -100,9 +103,13 @@ def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load", tim
     )
 
     # Sequential component
-    X_s_train, y_s_train = utils.build_traditional_sequences(train_df, m, horizon, target_col)
+    X_s_train, y_s_train = utils.build_traditional_sequences(
+        train_df, m, horizon, target_col
+    )
     X_s_val, y_s_val = utils.build_traditional_sequences(val_df, m, horizon, target_col)
-    X_s_test, y_s_test = utils.build_traditional_sequences(test_df, m, horizon, target_col)
+    X_s_test, y_s_test = utils.build_traditional_sequences(
+        test_df, m, horizon, target_col
+    )
 
     # Periodic component
     X_p_train = utils.build_periodic_sequences(train_df, m, horizon, n)
@@ -115,7 +122,6 @@ def di_rnn_pipeline(load_path, m, n, horizon, batch_size, target_col="load", tim
     test_loader = utils.to_loader(X_s_test, X_p_test, y_s_test, batch_size)
 
     return scaler, (train_loader, val_loader, test_loader)
-
 
 
 def base_residual_pipeline(
@@ -159,7 +165,7 @@ def base_residual_pipeline(
             SPLIT_RATIO,
             uni=True,
             target_col=target_col,
-            df_raw=df_unsmoothed
+            df_raw=df_unsmoothed,
         )
 
     return utils.get_data_loaders(
@@ -170,5 +176,28 @@ def base_residual_pipeline(
         SPLIT_RATIO,
         uni=False,
         target_col=target_col,
-        df_raw=df_unsmoothed
+        df_raw=df_unsmoothed,
+    )
+
+
+def uni_model_pipeline(
+    load_dir,
+    lookback,
+    horizon,
+    batch,
+    time_col="datetime",
+    target_col="load",
+    freq="1h",
+):
+    df, _ = utils.stack_dataframes_long(load_dir, time_col, freq)
+
+    return utils.get_universal_data_loaders(
+        df,
+        lookback,
+        horizon,
+        batch,
+        SPLIT_RATIO,
+        time_col=time_col,
+        target_col=target_col,
+        consumer_col="consumer_id",
     )

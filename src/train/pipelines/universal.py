@@ -1,29 +1,29 @@
 import torch
 import os
 import time
+import numpy as np
+from src.train.utils import calculate_avg_metrics, calculate_aunl
+from src.train.globals import TRACKING_METRIC, MIN_EPOCHS, GlobalTracker
 import src.logs.utils as log
-from src.train.utils import calculate_aunl, drop_extra_targets, calculate_metrics
-from src.train.globals import TRACKING_METRIC, MIN_EPOCHS
+
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
 
 
 def forward_batch(model, batch, device):
-    x, y = batch
-    x, y = x.to(device), y.to(device)
-    y_pred = model(x)
-
-    return y_pred, y
+    x, y, consumer_id = batch
+    x, y, consumer_id = x.to(device), y.to(device), consumer_id.to(device)
+    y_pred = model(x, consumer_id)
+    return y_pred, y, consumer_id
 
 
 def train_one_epoch(model, train_loader, criterion, optimizer, device):
     model.train()
     total_loss = 0
-    all_preds, all_targets = [], []
-
-    for i, batch in enumerate(train_loader):
-        preds, targets = forward_batch(model, batch, device)
+    all_preds, all_targets, all_ids = [], [], []
+    for batch in train_loader:
+        preds, targets, consumer_ids = forward_batch(model, batch, device)
         loss = criterion(preds, targets)
 
         optimizer.zero_grad()
@@ -33,48 +33,38 @@ def train_one_epoch(model, train_loader, criterion, optimizer, device):
         total_loss += loss.item() * targets.size(0)
         all_preds.append(preds.detach().cpu())
         all_targets.append(targets.detach().cpu())
-
-        print(
-            f"🟦 [Train] Batch {i + 1}/{len(train_loader)} - Loss: {loss.item():.4f}",
-            end="\r",
-        )
-
-    print()  # For newline after loop
+        all_ids.append(consumer_ids.detach().cpu())
+    out_ids = torch.cat(all_ids)
     return (
         total_loss / len(train_loader.dataset),
         torch.cat(all_preds),
         torch.cat(all_targets),
+        out_ids,
     )
 
 
-def evaluate_model(model, val_loader, criterion, device):
+def evaluate_model(model, loader, criterion, device):
     model.eval()
     total_loss = 0
-    all_preds, all_targets = [], []
-
+    all_preds, all_targets, all_ids = [], [], []
     with torch.no_grad():
-        for i, batch in enumerate(val_loader):
-            preds, targets = forward_batch(model, batch, device)
+        for batch in loader:
+            preds, targets, consumer_ids = forward_batch(model, batch, device)
             loss = criterion(preds, targets)
-
             total_loss += loss.item() * targets.size(0)
             all_preds.append(preds.cpu())
             all_targets.append(targets.cpu())
-
-            print(
-                f"🟨 [Eval ] Batch {i + 1}/{len(val_loader)} - Loss: {loss.item():.4f}",
-                end="\r",
-            )
-
-    print()  # Newline
+            all_ids.append(consumer_ids.cpu())
+    out_ids = torch.cat(all_ids)
     return (
-        total_loss / len(val_loader.dataset),
+        total_loss / len(loader.dataset),
         torch.cat(all_preds),
         torch.cat(all_targets),
+        out_ids,
     )
 
 
-def standard_train_pipeline(
+def universal_train_pipeline(
     model_name,
     model_type,
     model_component,
@@ -82,38 +72,26 @@ def standard_train_pipeline(
     data_config,
     params,
     epochs,
-    tracker=None,
+    tracker: GlobalTracker = None,
 ):
-
     device = data_config["device"]
-    early_stopping = True if tracker else False
-    global GLOBAL_PATIENCE
+    early_stopping = tracker is not None
 
-    scaler, (train_loader, val_loader, test_loader), model, optimizer, criterion = (
+    scalers, (train_loader, val_loader, test_loader), model, optimizer, criterion = (
         model_fn(data_config, params)
     )
 
-    if len(train_loader.dataset[0]) == 3:
-        train_loader = drop_extra_targets(train_loader)
-        val_loader = drop_extra_targets(val_loader)
-        test_loader = drop_extra_targets(test_loader)
-
-    model = model if not isinstance(model, tuple) else model[0]
-    optimizer = optimizer if not isinstance(optimizer, tuple) else optimizer[0]
-
     train_losses, val_losses = [], []
-    patience_counter = 0
 
     for epoch in range(epochs):
-
-        str = time.time()
-        train_loss, train_preds, train_targets = train_one_epoch(
+        strt = time.time()
+        train_loss, train_preds, train_targets, train_ids = train_one_epoch(
             model, train_loader, criterion, optimizer, device
         )
         etr = time.time()
 
         svl = time.time()
-        val_loss, val_preds, val_targets = evaluate_model(
+        val_loss, val_preds, val_targets, val_ids = evaluate_model(
             model, val_loader, criterion, device
         )
         evl = time.time()
@@ -125,36 +103,31 @@ def standard_train_pipeline(
             f"📈 Epoch {epoch+1}/{epochs} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
         )
 
-        # === Logging ===
         log.log_training_loss(
-            epoch, train_loss, val_loss, str, evl, model_name, model_component
-        )
-
-        log.log_evaluation_metrics(
             epoch,
-            calculate_metrics(
-                scaler,
-                train_targets.numpy(),
-                train_preds.numpy(),
-                etr - str,
-                "train",
-            ),
+            train_losses[-1],
+            val_losses[-1],
+            strt,
+            evl,
             model_name,
             model_component,
         )
 
-        val_metrics = calculate_metrics(
-            scaler,
-            val_targets.numpy(),
-            val_preds.numpy(),
-            evl - svl,
-            "val",
+        # --- Logging averaged metrics ---
+        log.log_evaluation_metrics(
+            epoch,
+            calculate_avg_metrics(
+                train_targets, train_preds, train_ids, scalers, etr - strt, "train"
+            ),
+            model_name,
+        )
+        val_metrics = calculate_avg_metrics(
+            val_targets, val_preds, val_ids, scalers, evl - svl, "val"
         )
         log.log_evaluation_metrics(
             epoch,
             val_metrics,
             model_name,
-            model_component,
         )
 
         # === Early stopping ===
@@ -174,33 +147,19 @@ def standard_train_pipeline(
                 tracker.update_aunl(model_type, aunl)
                 tracker.update_metric(model_type, metric)
 
+    # --- Final test evaluation ---
     sts = time.time()
-    _, test_preds, test_targets = evaluate_model(model, test_loader, criterion, device)
+    _, test_preds, test_targets, test_ids = evaluate_model(
+        model, test_loader, criterion, device
+    )
     ets = time.time()
-
     log.log_evaluation_metrics(
         epoch,
-        calculate_metrics(
-            scaler,
-            test_targets.numpy(),
-            test_preds.numpy(),
-            ets - sts,
-            "test",
+        calculate_avg_metrics(
+            test_targets, test_preds, test_ids, scalers, ets - sts, "test"
         ),
         model_name,
-        model_component,
     )
 
-    log.log_eval_data(
-        model_name,
-        scaler,
-        test_targets.numpy(),
-        test_preds.numpy(),
-        model_component,
-    )
-
-    if model_component != "base":
-        torch.save(model, os.path.join(MODELS, model_name))
-        print(f"💾 Saved model from last epoch as {model_name}")
-
+    torch.save(model, os.path.join(MODELS, model_name))
     return model

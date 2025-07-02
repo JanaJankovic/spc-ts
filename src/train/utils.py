@@ -37,7 +37,9 @@ def get_parameters(model_name):
         p["dropout_rnn"] = random.choice(s["dropout"])
         p["dropout_fc"] = random.choice(s["dropout"])
         p["dropout_cnn"] = random.choice(s["dropout"])
-        p["cnn_channels"] = random.choices(s["cnn_channel"], k=random.choice(s["cnn_size"]))
+        p["cnn_channels"] = random.choices(
+            s["cnn_channel"], k=random.choice(s["cnn_size"])
+        )
         p["residual_layers"] = random.choice(s["residual_layers"])
         p["hidden_dim"] = random.choice(s["neurons"])
         p["learning_rate"] = random.choice(s["learning_rate"])
@@ -57,7 +59,9 @@ def get_parameters(model_name):
         p["batch_size"] = random.choice(s["batch_size"])
 
     elif model_name == "cnn_lstm":
-        p["cnn_channels"] = random.choices(s["cnn_channel"], k=random.choice(s["cnn_size"]))
+        p["cnn_channels"] = random.choices(
+            s["cnn_channel"], k=random.choice(s["cnn_size"])
+        )
         p["kernel_size"] = random.choice(s["kernel_size"])
         p["lstm_hidden_size"] = random.choice(s["neurons"])
         p["lstm_layers"] = random.choice(s["lstm_layers"])
@@ -164,11 +168,46 @@ def calculate_metrics(scaler, y_true, y_pred, elapsed_time, type="test", scale=T
         "Spearman": spearman_corr,
     }
 
+
+def calculate_avg_metrics(targets, preds, ids, scalers, elapsed_time, eval_type):
+    # Compute per-consumer metrics and average numeric fields only
+    targets = targets.numpy()
+    preds = preds.numpy()
+    ids = ids.numpy()
+    all_cids = np.unique(ids)
+    per_consumer_metrics = []
+    for cid in all_cids:
+        idx = np.where(ids == cid)[0]
+        cid_targets = targets[idx]
+        cid_preds = preds[idx]
+        scaler = scalers[cid]
+        metrics = calculate_metrics(
+            scaler, cid_targets, cid_preds, elapsed_time, eval_type
+        )
+        per_consumer_metrics.append(metrics)
+    keys = per_consumer_metrics[0].keys()
+    avg_metrics = {}
+    for k in keys:
+        # Only average numeric fields, copy others (e.g., eval_type) as-is from first
+        try:
+            vals = [m[k] for m in per_consumer_metrics]
+            # Test if all are numbers (float, int, np.number)
+            if all(isinstance(v, (int, float, np.number)) for v in vals):
+                avg_metrics[k] = float(np.mean(vals))
+            else:
+                avg_metrics[k] = vals[
+                    0
+                ]  # Copy the first non-numeric value (e.g., string label)
+        except Exception:
+            avg_metrics[k] = vals[0]
+    return avg_metrics
+
+
 def drop_extra_targets(dataloader):
     # Unpack the (X, y, y_true) tuples into X and y only
     dataset = dataloader.dataset
-    two_tensor_list = [ (x, y) for (x, y, _) in dataset ]
-    
+    two_tensor_list = [(x, y) for (x, y, _) in dataset]
+
     # Stack all data along axis 0 to create new tensors
     X = torch.stack([x for (x, y) in two_tensor_list])
     y = torch.stack([y for (x, y) in two_tensor_list])
@@ -179,6 +218,7 @@ def drop_extra_targets(dataloader):
         shuffle=False,
         drop_last=False,
     )
+
 
 class RMSELoss(nn.Module):
     def __init__(self, eps=1e-8):

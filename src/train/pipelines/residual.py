@@ -12,6 +12,7 @@ import numpy as np
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
 
+
 def compute_residual_dataset(model, data_loader, device):
     model.eval()
     all_inputs, all_residuals = [], []
@@ -21,7 +22,7 @@ def compute_residual_dataset(model, data_loader, device):
             if len(batch) == 3:
                 X, _, y_scaled = batch  # (X, y_smooth, y_true)
             else:
-                X, y_scaled = batch     # (X, y_smooth)
+                X, y_scaled = batch  # (X, y_smooth)
 
             X, y_scaled = X.to(device), y_scaled.to(device)
             y_pred = model(X)
@@ -29,11 +30,22 @@ def compute_residual_dataset(model, data_loader, device):
 
             all_inputs.append(X.cpu())
             all_residuals.append(residuals.cpu())
-    
+
     return TensorDataset(torch.cat(all_inputs), torch.cat(all_residuals))
 
 
-def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epochs, device, model_name, val_loader, scaler, tracker: GlobalTracker):
+def train_residual_model(
+    res_model,
+    residual_dataset,
+    optimizer,
+    batch_size,
+    epochs,
+    device,
+    model_name,
+    val_loader,
+    scaler,
+    tracker: GlobalTracker,
+):
     train_loader = DataLoader(residual_dataset, batch_size=batch_size)
     criterion = RMSELoss()
     patience_counter = 0
@@ -94,30 +106,62 @@ def train_residual_model(res_model, residual_dataset, optimizer, batch_size, epo
         y_pred_val_np = tensors_to_numpy(y_pred_val)
 
         # Then pass these numpy arrays instead of lists:
-        log_training_loss(epoch, train_losses[-1], val_losses[-1], start_train, end_val, model_name, 'residual')
-        log_evaluation_metrics(epoch, y_true_train_np, y_pred_train_np, scaler, "train", end_train - start_train, model_name, "residual")
-        log_evaluation_metrics(epoch, y_true_val_np, y_pred_val_np, scaler, "val", end_val - start_val, model_name, "residual")
+        log_training_loss(
+            epoch,
+            train_losses[-1],
+            val_losses[-1],
+            start_train,
+            end_val,
+            model_name,
+            "residual",
+        )
+        log_evaluation_metrics(
+            epoch,
+            calculate_metrics(
+                scaler,
+                y_true_train_np,
+                y_pred_train_np,
+                end_train - start_train,
+            ),
+            "train",
+            model_name,
+            "residual",
+        )
+        val_metrics = calculate_metrics(
+            scaler,
+            y_true_val_np,
+            y_pred_val_np,
+            end_val - start_val,
+            "val",
+        )
+        log_evaluation_metrics(
+            epoch,
+            val_metrics,
+            model_name,
+            "residual",
+        )
 
         # === Early stopping ===
         if early_stopping:
-            metrics = calculate_metrics(scaler, y_true_val_np, y_pred_val_np, 0, '')
-            metric = metrics[TRACKING_METRIC]
+            metric = val_metrics[TRACKING_METRIC]
             _, aunl = calculate_aunl(train_losses, val_losses)
-            
+
             if epoch > MIN_EPOCHS:
-                if aunl > tracker.get_score('residual', 'aunl'):
-                    print(f"⚠️ No improvement in AUNL ({aunl}/{tracker.get_score('residual', 'aunl')})")
+                if aunl > tracker.get_score("residual", "aunl"):
+                    print(
+                        f"⚠️ No improvement in AUNL ({aunl}/{tracker.get_score('residual', 'aunl')})"
+                    )
                     print("🛑 Early stopping.")
                     break
 
-            if metric < tracker.get_score('residual', 'metric'):
-                tracker.update_aunl('residual', aunl)
-                tracker.update_metric('residual', metric)
+            if metric < tracker.get_score("residual", "metric"):
+                tracker.update_aunl("residual", aunl)
+                tracker.update_metric("residual", metric)
 
 
-
-
-def test_evaluation(base_model, res_model, test_loader, scaler, model_name, epoch, device):
+def test_evaluation(
+    base_model, res_model, test_loader, scaler, model_name, epoch, device
+):
     base_model.eval()
     res_model.eval()
     y_pred, y_true = [], []
@@ -133,16 +177,35 @@ def test_evaluation(base_model, res_model, test_loader, scaler, model_name, epoc
 
     y_pred = torch.cat(y_pred).numpy().reshape(-1, 1)
     y_true = torch.cat(y_true).numpy().reshape(-1, 1)
-    
-    log_evaluation_metrics(epoch, y_true, y_pred, scaler, "test", end_test-start_test, model_name, "residual")
+
+    log_evaluation_metrics(
+        epoch,
+        calculate_metrics(scaler, y_true, y_pred, end_test - start_test, "test"),
+        model_name,
+        "residual",
+    )
     log_eval_data(model_name, scaler, y_true, y_pred, component="residual")
 
 
-
-def train_residual_pipeline(model_name, model_type, model_component, model_fn, data_config, params, epochs, tracker=None):
+def train_residual_pipeline(
+    model_name,
+    model_type,
+    model_component,
+    model_fn,
+    data_config,
+    params,
+    epochs,
+    tracker=None,
+):
     print("⚙️ Setting up models...")
     device = data_config["device"]
-    scaler, (train_loader, val_loader, test_loader), (base_model, residual_model), (_, optimizer), _ = model_fn(data_config, params)
+    (
+        scaler,
+        (train_loader, val_loader, test_loader),
+        (base_model, residual_model),
+        (_, optimizer),
+        _,
+    ) = model_fn(data_config, params)
 
     print("🚀 Training base model...")
     base_model = standard_train_pipeline(
@@ -161,14 +224,32 @@ def train_residual_pipeline(model_name, model_type, model_component, model_fn, d
 
     print("🧠 Training residual model...")
     residual_model.base_model = base_model
-    train_residual_model(residual_model, residual_dataset, optimizer, params["batch_size"], epochs, device, model_name, val_loader, scaler, tracker)
+    train_residual_model(
+        residual_model,
+        residual_dataset,
+        optimizer,
+        params["batch_size"],
+        epochs,
+        device,
+        model_name,
+        val_loader,
+        scaler,
+        tracker,
+    )
 
     print("🧪 Testing combined model...")
-    test_evaluation(base_model, residual_model, test_loader, scaler, model_name, epoch=epochs - 1, device=device)
+    test_evaluation(
+        base_model,
+        residual_model,
+        test_loader,
+        scaler,
+        model_name,
+        epoch=epochs - 1,
+        device=device,
+    )
 
     torch.save(base_model, os.path.join(MODELS, f"base_{model_name}"))
     torch.save(residual_model, os.path.join(MODELS, f"res_{model_name}"))
     print("💾 Models saved.")
 
     return base_model, residual_model
-

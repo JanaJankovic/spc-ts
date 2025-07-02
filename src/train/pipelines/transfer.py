@@ -5,8 +5,11 @@ from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 import src.logs.utils as log
 import time
 from src.models.model import get_optimizer
+from src.train.pipelines.residual import compute_residual_dataset
+from src.train.utils import calculate_metrics
 
 LEARNING_RATE = 0.0001
+
 
 def freeze_all_except(model, component_names):
     # Freeze all parameters once
@@ -19,34 +22,69 @@ def freeze_all_except(model, component_names):
 
 
 def transfer_learning_pipeline(
-    model, model_type, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs
+    model,
+    model_type,
+    model_name,
+    model_component,
+    param_names_to_tune,
+    model_fn,
+    data_config,
+    params,
+    epochs,
 ):
-    if model_type == 'base_residual':
-        non_standard_tl_pipeline()
+    if model_type == "base_residual":
+        non_standard_tl_pipeline(
+            model,
+            model_type,
+            model_name,
+            model_component,
+            param_names_to_tune,
+            model_fn,
+            data_config,
+            params,
+            epochs,
+        )
     else:
-        standard_tl_pipeline(model, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs)
+        standard_tl_pipeline(
+            model,
+            model_name,
+            model_component,
+            param_names_to_tune,
+            model_fn,
+            data_config,
+            params,
+            epochs,
+        )
 
 
-def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune, model_fn, data_config, params, epochs
+def standard_tl_pipeline(
+    model,
+    model_name,
+    model_component,
+    param_names_to_tune,
+    model_fn,
+    data_config,
+    params,
+    epochs,
 ):
     scaler, (train_loader, val_loader, test_loader), _, optimizer, criterion = model_fn(
         data_config, params
     )
     # Step 1: Freeze everything except desired parameters
-    device = data_config['device']
+    device = data_config["device"]
     freeze_all_except(model, param_names_to_tune)
     model = model.to(device)
 
-    optimizer = get_optimizer(params['optimizer'], model.parameters(), LEARNING_RATE)
+    optimizer = get_optimizer(params["optimizer"], model.parameters(), LEARNING_RATE)
 
-    best_val_loss = float('inf')
+    best_val_loss = float("inf")
     patience = 0
 
     for epoch in range(epochs):
         model.train()
         train_loss = 0
         train_pred, train_y = [], []
-        
+
         str_time = time.time()
         for x, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
             x, y = x.to(device), y.to(device)
@@ -56,7 +94,7 @@ def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
-            
+
             train_pred.append(output.detach().cpu())
             train_y.append(y.detach().cpu())
 
@@ -78,11 +116,13 @@ def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune
 
                 val_pred.append(output.detach().cpu())
                 val_y.append(y.detach().cpu())
-        
+
         val_loss /= len(val_loader)
         evl = time.time()
 
-        print(f"Epoch {epoch+1}: Train Loss = {train_loss:.4f}, Val Loss = {val_loss:.4f}")
+        print(
+            f"Epoch {epoch+1}: Train Loss = {train_loss:.4f}, Val Loss = {val_loss:.4f}"
+        )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
@@ -96,37 +136,35 @@ def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune
                 if patience >= GLOBAL_PATIENCE:
                     print("🛑 Early stopping triggered.")
                     break
-        
+
         log.log_training_loss(
-            epoch, 
-            train_loss, 
-            val_loss, 
-            str_time, 
-            evl, 
-            model_name, 
-            model_component
+            epoch, train_loss, val_loss, str_time, evl, model_name, model_component
         )
 
         log.log_evaluation_metrics(
             epoch,
-            torch.cat(train_y),
-            torch.cat(train_pred),
-            scaler,
-            "train",
-            etr - str_time,
+            calculate_metrics(
+                scaler,
+                torch.cat(train_y),
+                torch.cat(train_pred),
+                etr - str_time,
+                "train",
+            ),
             model_name,
-            model_component
+            model_component,
         )
 
         log.log_evaluation_metrics(
             epoch,
-            torch.cat(val_y),
-            torch.cat(val_pred),
-            scaler,
-            "val",
-            evl - svl,
+            calculate_metrics(
+                scaler,
+                torch.cat(val_y),
+                torch.cat(val_pred),
+                evl - svl,
+                "val",
+            ),
             model_name,
-            model_component
+            model_component,
         )
 
     # Load best model
@@ -153,13 +191,15 @@ def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune
 
     log.log_evaluation_metrics(
         epoch,
-        torch.cat(test_y),
-        torch.cat(test_pred),
-        scaler,
-        "test",
-        ets - sts,
+        calculate_metrics(
+            scaler,
+            torch.cat(test_y),
+            torch.cat(test_pred),
+            ets - sts,
+            "test",
+        ),
         model_name,
-        model_component
+        model_component,
     )
 
     # LOG data
@@ -168,5 +208,15 @@ def standard_tl_pipeline(model, model_name, model_component, param_names_to_tune
     return model
 
 
-def non_standard_tl_pipeline():
-    pass
+def non_standard_tl_pipeline(
+    model,
+    model_type,
+    model_name,
+    model_component,
+    param_names_to_tune,
+    model_fn,
+    data_config,
+    params,
+    epochs,
+):
+    base_model, res_model = model
