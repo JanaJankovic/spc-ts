@@ -1,10 +1,6 @@
 import src.train.main as train_pipeline
 import src.models.model as model_handler
 from src.train.utils import get_parameters
-import src.logs.utils as log
-import torch
-import gc
-import os
 
 EPOCHS = 50
 TRIALS = 25
@@ -125,39 +121,39 @@ def cnn_di_rnn(data_config):
 if __name__ == "__main__":
     # log.create_logs_files()
 
-    data_config = {
-        "load_path": "",
-        "m": 336,
-        "n": 14,
-        "lookback": 336,
-        "horizon": 1,
-        "target_col": "load",
-        "time_col": "datetime",
-        "freq": "1h",
-        "use_calendar": True,
-        "use_weather": True,
-        "device": "cuda",
-    }
+    # data_config = {
+    #     "load_path": "",
+    #     "m": 336,
+    #     "n": 14,
+    #     "lookback": 336,
+    #     "horizon": 1,
+    #     "target_col": "load",
+    #     "time_col": "datetime",
+    #     "freq": "1h",
+    #     "use_calendar": True,
+    #     "use_weather": True,
+    #     "device": "cuda",
+    # }
 
-    mm_files = [
-        f for f in os.listdir(DATA_DIR) if f.startswith("mm") and f.endswith(".csv")
-    ]
+    # mm_files = [
+    #     f for f in os.listdir(DATA_DIR) if f.startswith("mm") and f.endswith(".csv")
+    # ]
 
-    data_config["freq"] = "1d"
-    data_config["lookback"] = 14
+    # data_config["freq"] = "1d"
+    # data_config["lookback"] = 14
 
-    for file in mm_files:
-        data_config["load_path"] = f"data/processed/{file}"
+    # for file in mm_files:
+    #     data_config["load_path"] = f"data/processed/{file}"
 
-        # lstm(data_config)
-        # torch.cuda.empty_cache(); gc.collect()
+    #     # lstm(data_config)
+    #     # torch.cuda.empty_cache(); gc.collect()
 
-        # cnn_lstm(data_config)
-        # torch.cuda.empty_cache(); gc.collect()
+    #     # cnn_lstm(data_config)
+    #     # torch.cuda.empty_cache(); gc.collect()
 
-        base_residual(data_config)
-        torch.cuda.empty_cache()
-        gc.collect()
+    #     base_residual(data_config)
+    #     torch.cuda.empty_cache()
+    #     gc.collect()
 
     # 1 hour
     # for file in mm_files:
@@ -174,3 +170,35 @@ if __name__ == "__main__":
 
     # cnn_di_rnn(data_config)
     # torch.cuda.empty_cache(); gc.collect()
+
+    data_config = {
+        "load_path": DATA_DIR,
+        "m": 336,
+        "n": 14,
+        "lookback": 14,
+        "horizon": 1,
+        "target_col": "load",
+        "time_col": "datetime",
+        "freq": "1d",
+        "device": "cuda",
+    }
+
+    train_pipeline.train_model(
+        "universal",
+        model_fn=lambda config, p: model_handler.get_universal(config, p),
+        data_config=data_config,
+        param_sampler=lambda: get_parameters("cnn_lstm"),
+        trials=TRIALS,
+        epochs=EPOCHS,
+        early_stopping=False,
+    )
+
+    train_pipeline.train_model(
+        "universal",
+        model_fn=lambda config, p: model_handler.get_universal(config, p),
+        data_config=data_config,
+        param_sampler=lambda: get_parameters("cnn_lstm"),
+        trials=TRIALS,
+        epochs=EPOCHS,
+        early_stopping=True,
+    )

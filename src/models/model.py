@@ -260,56 +260,53 @@ def get_model_fn(model_type):
     elif model_type == "cnn_di_rnn":
         return get_cnn_di_rnn
     elif model_type == "base_residual":
-        return get_base_residual
+        return get_lstm_mlp
     elif model_type == "universal":
         return get_universal
     else:
         raise ValueError(f"❌ Unknown model type: '{model_type}'")
 
 
-def get_model_component_names(model_type, component):
-    if model_type == "lstm":
-        if component in ["dense", "dense_cnn"]:
-            return ["fc2"]
+def find_submodules_by_type(model, target_type, prefix=""):
+    matches = []
+    for name, module in model.named_children():
+        path = f"{prefix}.{name}" if prefix else name
+        if isinstance(module, target_type):
+            matches.append(path)
+        # If it's a container, search deeper
+        if isinstance(module, (nn.Sequential, nn.ModuleList)):
+            for i, submod in enumerate(module):
+                subpath = f"{path}.{i}"
+                if isinstance(submod, target_type):
+                    matches.append(subpath)
+                # You could recurse deeper here if you allow nested containers
+    return matches
+
+
+def get_submodule_by_path(model, path):
+    """
+    Resolves 'convs.0' to model.convs[0] etc.
+    """
+    parts = path.split(".")
+    obj = model
+    for part in parts:
+        if part.isdigit():
+            obj = obj[int(part)]
         else:
-            raise ValueError(
-                f"Unknown component '{component}' for model_type '{model_type}'"
-            )
-    elif model_type == "di_rnn":
-        if component in ["dense", "dense_cnn"]:
-            return ["bpnn.fc2"]
-        else:
-            raise ValueError(
-                f"Unknown component '{component}' for model_type '{model_type}'"
-            )
-    elif model_type == "base_residual":
-        if component in ["dense", "dense_cnn"]:
-            return ["fc"]
-        else:
-            raise ValueError(
-                f"Unknown component '{component}' for model_type '{model_type}'"
-            )
-    elif model_type == "cnn_lstm":
-        if component == "dense":
-            return ["fc2"]
-        elif component == "cnn":
-            return [f"convs.{i}" for i in range(3)]
-        elif component == "dense_cnn":
-            return [f"convs.{i}" for i in range(3)] + ["fc2"]
-        else:
-            raise ValueError(
-                f"Unknown component '{component}' for model_type '{model_type}'"
-            )
-    elif model_type == "cnn_di_rnn":
-        if component == "dense":
-            return ["bpnn.fc2"]
-        elif component == "cnn":
-            return ["cnn_seq", "cnn_per"]
-        elif component == "dense_cnn":
-            return ["cnn_seq", "cnn_per", "bpnn.fc2"]
-        else:
-            raise ValueError(
-                f"Unknown component '{component}' for model_type '{model_type}'"
-            )
+            obj = getattr(obj, part)
+    return obj
+
+
+def get_model_component_names(model, model_type, component):
+    if component == "dense":
+        # Look for any nn.Linear not inside CNN/ModuleList, or standardize as 'fc2'
+        # Or simply return ['fc2'] if standard.
+        return ["fc2"]
+    elif component == "cnn":
+        # Find all Conv1d layers dynamically
+        return find_submodules_by_type(model, nn.Conv1d)
+    elif component == "dense_cnn":
+        # Both
+        return find_submodules_by_type(model, nn.Conv1d) + ["fc2"]
     else:
-        raise ValueError(f"Unknown model_type: {model_type}")
+        raise ValueError(f"Unknown component '{component}'")

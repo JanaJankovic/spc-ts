@@ -4,20 +4,24 @@ import os
 from src.train.globals import GLOBAL_PATIENCE, MIN_EPOCHS
 import src.logs.utils as log
 import time
-from src.models.model import get_optimizer
+from src.models.model import get_optimizer, get_submodule_by_path
 from src.train.pipelines.residual import compute_residual_dataset
 from src.train.utils import calculate_metrics
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+MODELS = os.path.join(PROJECT_ROOT, "models")
 
 LEARNING_RATE = 0.0001
 
 
 def freeze_all_except(model, component_names):
-    # Freeze all parameters once
+    # Freeze all params
     for param in model.parameters():
         param.requires_grad = False
-    # Unfreeze each requested component
+    # Unfreeze only the specified submodules
     for component_name in component_names:
-        for param in getattr(model, component_name).parameters():
+        submodule = get_submodule_by_path(model, component_name)
+        for param in submodule.parameters():
             param.requires_grad = True
 
 
@@ -133,7 +137,7 @@ def standard_tl_pipeline(
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience = 0
-            torch.save(model, model_name)
+            torch.save(model, os.path.join(MODELS, model_name))
             print("✅ Model improved and was saved.")
         else:
             patience += 1
