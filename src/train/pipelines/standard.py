@@ -83,6 +83,7 @@ def standard_train_pipeline(
     params,
     epochs,
     tracker=None,
+    universal_model=None,
 ):
 
     device = data_config["device"]

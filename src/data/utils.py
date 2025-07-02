@@ -605,24 +605,31 @@ def get_universal_data_loaders(
             "val": scaler.transform(arr[train_end:val_end]),
             "test": scaler.transform(arr[val_end:]),
         }
-        split_starts = {"train": 0, "val": train_end, "test": val_end}
 
         for split_name, split_arr in splits.items():
             for i in range(len(split_arr) - lookback - horizon + 1):
-                X = split_arr[i : i + lookback, 0]
-                y = split_arr[i + lookback : i + lookback + horizon, 0]
+                X = split_arr[i : i + lookback]
+                y = split_arr[i + lookback : i + lookback + horizon]
+                # Always ensure X is shape (lookback, num_features)
+                if X.ndim == 1:
+                    X = X[:, None]  # [lookback, 1]
                 all_X.append(X)
-                all_y.append(y)
+                all_y.append(y.flatten())
                 all_ids.append(cid)
                 split_labels.append(split_name)
 
     # Convert to arrays/tensors
-    X_all = torch.tensor(np.stack(all_X), dtype=torch.float32)
-    y_all = torch.tensor(np.stack(all_y), dtype=torch.float32)
-    ids_all = torch.tensor(np.array(all_ids), dtype=torch.long)
+    X_all = np.stack(all_X)  # [num_samples, lookback, num_features]
+    y_all = np.stack(all_y)  # [num_samples, horizon]
+    ids_all = np.array(all_ids)
     split_labels = np.array(split_labels)
 
-    # Now, create split indices by split_labels
+    # For PyTorch
+    X_all = torch.tensor(X_all, dtype=torch.float32)
+    y_all = torch.tensor(y_all, dtype=torch.float32)
+    ids_all = torch.tensor(ids_all, dtype=torch.long)
+
+    # Split indices
     train_idx = np.where(split_labels == "train")[0]
     val_idx = np.where(split_labels == "val")[0]
     test_idx = np.where(split_labels == "test")[0]
@@ -635,5 +642,5 @@ def get_universal_data_loaders(
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 
-    print("✅ Universal DataLoaders ready (no data leakage).")
+    print(f"Input shape for model: {X_all.shape[1:]}")
     return consumer_scalers, (train_loader, val_loader, test_loader), X_all.shape[1:]

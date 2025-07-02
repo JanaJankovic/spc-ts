@@ -8,6 +8,7 @@ import os
 from src.train.utils import calculate_aunl, calculate_metrics
 from src.train.globals import TRACKING_METRIC, MIN_EPOCHS, GlobalTracker
 import numpy as np
+from src.models.model import get_residual
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
 MODELS = os.path.join(PROJECT_ROOT, "models")
@@ -15,23 +16,23 @@ MODELS = os.path.join(PROJECT_ROOT, "models")
 
 def compute_residual_dataset(model, data_loader, device):
     model.eval()
-    all_inputs, all_residuals = [], []
+    all_base_preds, all_residuals = [], []
 
     with torch.no_grad():
         for batch in data_loader:
             if len(batch) == 3:
-                X, _, y_scaled = batch  # (X, y_smooth, y_true)
+                X, _, y_true = batch
             else:
-                X, y_scaled = batch  # (X, y_smooth)
+                X, y_true = batch
 
-            X, y_scaled = X.to(device), y_scaled.to(device)
-            y_pred = model(X)
-            residuals = y_scaled - y_pred
+            X, y_true = X.to(device), y_true.to(device)
+            y_base = model(X)
+            residuals = y_true - y_base
 
-            all_inputs.append(X.cpu())
+            all_base_preds.append(y_base.cpu())
             all_residuals.append(residuals.cpu())
 
-    return TensorDataset(torch.cat(all_inputs), torch.cat(all_residuals))
+    return TensorDataset(torch.cat(all_base_preds), torch.cat(all_residuals))
 
 
 def train_residual_model(
@@ -61,7 +62,7 @@ def train_residual_model(
         for X, r in train_loader:
             X, r = X.to(device), r.to(device)
             optimizer.zero_grad()
-            pred = res_model(X)
+            pred = res_model(X.unsqueeze(1))
             loss = criterion(pred, r)
             loss.backward()
             optimizer.step()
@@ -83,7 +84,7 @@ def train_residual_model(
                 X, y_true = X.to(device), y_true.to(device)
 
                 base = res_model.base_model(X)
-                res = res_model(X)
+                res = res_model(base.unsqueeze(1))
                 combined = base + res
 
                 val_loss += criterion(combined, y_true).item()
@@ -122,8 +123,8 @@ def train_residual_model(
                 y_true_train_np,
                 y_pred_train_np,
                 end_train - start_train,
+                "train",
             ),
-            "train",
             model_name,
             "residual",
         )
@@ -170,8 +171,12 @@ def test_evaluation(
     with torch.no_grad():
         for X, _, y in test_loader:
             X = X.to(device)
-            combined = base_model(X) + res_model(X)
-            y_pred.append(combined.cpu())
+
+            base = base_model(X)
+            correction = res_model(base.unsqueeze(1))
+            final_pred = base + correction
+
+            y_pred.append(final_pred.cpu())
             y_true.append(y.cpu())
     end_test = time.time()
 
@@ -196,38 +201,42 @@ def train_residual_pipeline(
     params,
     epochs,
     tracker=None,
+    universal_model=None,
 ):
     print("⚙️ Setting up models...")
     device = data_config["device"]
-    (
-        scaler,
-        (train_loader, val_loader, test_loader),
-        (base_model, residual_model),
-        (_, optimizer),
-        _,
-    ) = model_fn(data_config, params)
-
-    print("🚀 Training base model...")
-    base_model = standard_train_pipeline(
-        model_name=model_name,
-        model_type="base",
-        model_component="base",
-        model_fn=model_fn,
-        data_config=data_config,
-        params=params,
-        epochs=epochs,
-        tracker=tracker,
+    scaler, (train_loader, val_loader, test_loader), base_model, optimizer, _ = (
+        model_fn(data_config, params)
     )
+
+    if universal_model == None:
+        print("🚀 Training base model...")
+        base_model = standard_train_pipeline(
+            model_name=model_name,
+            model_type="base",
+            model_component="base",
+            model_fn=model_fn,
+            data_config=data_config,
+            params=params,
+            epochs=epochs,
+            tracker=tracker,
+        )
+    else:
+        base_model = universal_model
 
     print("📉 Computing residual dataset...")
     residual_dataset = compute_residual_dataset(base_model, train_loader, device)
+    X_sample, _ = residual_dataset[0]
+    input_shape = X_sample.shape[-1]  # e.g., 24 if horizon=24
+
+    residual_model, residual_optimizer = get_residual(input_shape, data_config, params)
 
     print("🧠 Training residual model...")
     residual_model.base_model = base_model
     train_residual_model(
         residual_model,
         residual_dataset,
-        optimizer,
+        residual_optimizer,
         params["batch_size"],
         epochs,
         device,

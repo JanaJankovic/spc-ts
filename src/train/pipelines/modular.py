@@ -249,6 +249,7 @@ def train_dirnn_pipeline(
     epochs,
     tracker=None,
     model_component="main",
+    universal_model=None,
 ):
     scaler, (train_loader, val_loader, test_loader), model, criterion = model_fn(
         data_config, params

@@ -13,8 +13,8 @@ MODELS = os.path.join(PROJECT_ROOT, "models")
 
 def forward_batch(model, batch, device):
     x, y, consumer_id = batch
-    x, y, consumer_id = x.to(device), y.to(device), consumer_id.to(device)
-    y_pred = model(x, consumer_id)
+    x, y = x.to(device), y.to(device)
+    y_pred = model(x)  # <-- just x!
     return y_pred, y, consumer_id
 
 
@@ -73,6 +73,7 @@ def universal_train_pipeline(
     params,
     epochs,
     tracker: GlobalTracker = None,
+    universal_model=None,
 ):
     device = data_config["device"]
     early_stopping = tracker is not None

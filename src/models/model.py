@@ -1,8 +1,9 @@
 from src.models.cnn_di_rnn import CNN_DIRNN
 from src.models.di_rnn import DIRNN
-from src.models.base_res import BasePredictor, ResidualRNN
+from src.models.lstm_mlp import LSTM_MLP
 from src.models.cnn_lstm import CNNLSTMModel
 from src.models.lstm import SimpleLSTM
+from src.models.residual_lstm import ResidualLSTM
 import src.data.pipeline as data_pipeline
 import torch.nn as nn
 import torch
@@ -95,7 +96,7 @@ def get_cnn_lstm(data_config, parameters):
     return scaler, data, model, optimizer, criterion
 
 
-def get_base_residual(data_config, parameters):
+def get_lstm_mlp(data_config, parameters):
     batch_size = parameters["batch_size"]
 
     scaler, data, input_shape = data_pipeline.base_residual_pipeline(
@@ -110,7 +111,7 @@ def get_base_residual(data_config, parameters):
         use_weather=data_config["use_weather"],
     )
 
-    base_model = BasePredictor(
+    lstm_mlp = LSTM_MLP(
         temporal_dim=input_shape[-1],
         static_dim=0,
         rnn_hidden=parameters["rnn_hidden"],
@@ -122,33 +123,39 @@ def get_base_residual(data_config, parameters):
         dropout_fusion=parameters["dropout_fc"],
     )
 
-    residual_model = ResidualRNN(
-        input_dim=input_shape[-1],
-        hidden_dim=parameters["hidden_dim"],
-        num_layers=parameters["residual_layers"],
-        output_dim=data_config["horizon"],
-        dropout=parameters["dropout_cnn"],
-    )
-    base_model.to(data_config["device"])
-    residual_model.to(data_config["device"])
+    lstm_mlp.to(data_config["device"])
 
-    base_optimizer = get_optimizer(
-        parameters["optimizer"], base_model.parameters(), parameters["learning_rate"]
+    optimizer = get_optimizer(
+        parameters["optimizer"], lstm_mlp.parameters(), parameters["learning_rate"]
     )
-    residual_optimizer = get_optimizer(
-        parameters["optimizer"],
-        residual_model.parameters(),
-        parameters["learning_rate"],
-    )
+
     criterion = nn.L1Loss()
 
     return (
         scaler,
         data,
-        (base_model, residual_model),
-        (base_optimizer, residual_optimizer),
+        lstm_mlp,
+        optimizer,
         criterion,
     )
+
+
+def get_residual(input_shape, data_config, parameters):
+    residual_model = ResidualLSTM(
+        input_dim=input_shape,
+        hidden_dim=parameters["hidden_dim"],
+        num_layers=parameters["residual_layers"],
+        output_dim=data_config["horizon"],
+        dropout=parameters["dropout_cnn"],
+    )
+    residual_model.to(data_config["device"])
+
+    optimizer = get_optimizer(
+        parameters["optimizer"],
+        residual_model.parameters(),
+        parameters["learning_rate"],
+    )
+    return residual_model, optimizer
 
 
 def get_di_rnn(data_config, parameters):

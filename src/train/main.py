@@ -16,7 +16,8 @@ def train_model(
     param_sampler,
     trials=1,
     epochs=50,
-    early_stopping=False
+    early_stopping=False,
+    universal_model=None,
 ):
     os.makedirs(MODELS, exist_ok=True)
     gc.collect()
@@ -33,7 +34,7 @@ def train_model(
         date_str = datetime.now().strftime("%Y%m%d%H%M%S")
         model_name = f"{date_str}_t{trial+1}_{model_type}.pt"
 
-        data_config['es'] = early_stopping
+        data_config["es"] = early_stopping
         log_trial_info(model_name, model_type, trial, data_config, params)
 
         pipeline(
@@ -44,7 +45,8 @@ def train_model(
             data_config=data_config,
             params=params,
             epochs=epochs,
-            tracker=tracker
+            tracker=tracker,
+            universal_model=universal_model,
         )
 
     print(f"\n🏁 All trials complete.")
