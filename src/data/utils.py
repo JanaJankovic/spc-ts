@@ -30,6 +30,7 @@ def fill_missing_time(df, datetime_col, method="interpolate"):
         raise ValueError(f"Unknown fill method: {method}")
 
     df = df.reset_index().rename(columns={"index": datetime_col})
+    df = df.sort_values(by=datetime_col).reset_index(drop=True)
 
     return df
 
@@ -200,7 +201,7 @@ def build_traditional_sequences(df, lookback, horizon, target_col="load"):
     target_idx = df.columns.get_loc(target_col)
     total_sequences = len(df) - lookback - horizon
 
-    for i in range(lookback, len(df) - horizon):
+    for i in range(lookback, len(df) - horizon + 1, horizon):
         if i % 1000 == 0 or i == lookback:
             print(
                 f"  🔄 Progress: {i - lookback + 1}/{total_sequences} sequences",
@@ -564,7 +565,7 @@ def stack_dataframes_long(load_dir, time_col, freq):
         if idx in keep_idx:
             df = df.copy()
             df["consumer_id"] = idx
-            long_dfs.append(df[[time_col, "load", "consumer_id"]])
+            long_dfs.append(df[["load", "consumer_id"]])
 
     # Concatenate all into long format
     big_df = pd.concat(long_dfs, ignore_index=True)
@@ -580,7 +581,6 @@ def get_universal_data_loaders(
     horizon,
     batch_size,
     split_ratio,
-    time_col="datetime",
     target_col="load",
     consumer_col="consumer_id",
 ):
@@ -590,37 +590,43 @@ def get_universal_data_loaders(
     all_X, all_y, all_ids, split_labels = [], [], [], []
 
     for cid, sub_df in df.groupby(consumer_col):
-        arr = sub_df.sort_values(time_col)[target_col].values.reshape(-1, 1)
+        arr = sub_df[[target_col]].values  # Shape (n, 1)
         n = len(arr)
         train_end = int(n * split_ratio[0])
         val_end = train_end + int(n * split_ratio[1])
-        # Fit scaler on *train* part ONLY
+
         scaler = MinMaxScaler()
         scaler.fit(arr[:train_end])
         consumer_scalers[cid] = scaler
 
-        # Transform splits with the *train-fitted* scaler
+        # Split *indices* on the full sub_df
         splits = {
-            "train": scaler.transform(arr[:train_end]),
-            "val": scaler.transform(arr[train_end:val_end]),
-            "test": scaler.transform(arr[val_end:]),
+            "train": sub_df.iloc[:train_end].copy(),
+            "val": sub_df.iloc[train_end:val_end].copy(),
+            "test": sub_df.iloc[val_end:].copy(),
         }
 
-        for split_name, split_arr in splits.items():
-            for i in range(len(split_arr) - lookback - horizon + 1):
-                X = split_arr[i : i + lookback]
-                y = split_arr[i + lookback : i + lookback + horizon]
-                # Always ensure X is shape (lookback, num_features)
-                if X.ndim == 1:
-                    X = X[:, None]  # [lookback, 1]
-                all_X.append(X)
-                all_y.append(y.flatten())
-                all_ids.append(cid)
-                split_labels.append(split_name)
+        # Scale splits in-place
+        for split_name, split_df in splits.items():
+            if len(split_df) < lookback + horizon:
+                continue  # skip splits too short for sequence
 
-    # Convert to arrays/tensors
-    X_all = np.stack(all_X)  # [num_samples, lookback, num_features]
-    y_all = np.stack(all_y)  # [num_samples, horizon]
+            split_df[target_col] = scaler.transform(split_df[[target_col]])
+            X, y = build_traditional_sequences(
+                split_df[[target_col]].copy(), lookback, horizon, target_col=target_col
+            )
+            print(f"CID={cid} {split_name}: X shape={X.shape} y shape={y.shape}")
+            all_X.append(X)
+            all_y.append(y)
+            all_ids.extend([cid] * len(X))
+            split_labels.extend([split_name] * len(X))
+
+    if not all_X:
+        raise ValueError("No sequences could be built for any consumer/split!")
+
+    # Stack all collected arrays
+    X_all = np.vstack(all_X)  # [num_samples, lookback, num_features]
+    y_all = np.vstack(all_y)  # [num_samples, horizon]
     ids_all = np.array(all_ids)
     split_labels = np.array(split_labels)
 
@@ -629,7 +635,6 @@ def get_universal_data_loaders(
     y_all = torch.tensor(y_all, dtype=torch.float32)
     ids_all = torch.tensor(ids_all, dtype=torch.long)
 
-    # Split indices
     train_idx = np.where(split_labels == "train")[0]
     val_idx = np.where(split_labels == "val")[0]
     test_idx = np.where(split_labels == "test")[0]
@@ -638,7 +643,7 @@ def get_universal_data_loaders(
     val_ds = TensorDataset(X_all[val_idx], y_all[val_idx], ids_all[val_idx])
     test_ds = TensorDataset(X_all[test_idx], y_all[test_idx], ids_all[test_idx])
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
 

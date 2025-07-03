@@ -4,9 +4,11 @@ from src.models.lstm_mlp import LSTM_MLP
 from src.models.cnn_lstm import CNNLSTMModel
 from src.models.lstm import SimpleLSTM
 from src.models.residual_lstm import ResidualLSTM
+from src.models.linear import LinearRegression
 import src.data.pipeline as data_pipeline
 import torch.nn as nn
 import torch
+import numpy as np
 
 
 def get_optimizer(name, model_params, lr=1e-3, **kwargs):
@@ -227,6 +229,7 @@ def get_universal(data_config, parameters):
         data_config["target_col"],
         data_config["freq"],
     )
+    print(input_shape)
 
     model = CNNLSTMModel(
         input_shape=input_shape,
@@ -250,21 +253,30 @@ def get_universal(data_config, parameters):
     return scalers, data, model, optimizer, criterion
 
 
-def get_model_fn(model_type):
-    if model_type == "cnn_lstm":
-        return get_cnn_lstm
-    elif model_type == "lstm":
-        return get_lstm
-    elif model_type == "di_rnn":
-        return get_di_rnn
-    elif model_type == "cnn_di_rnn":
-        return get_cnn_di_rnn
-    elif model_type == "base_residual":
-        return get_lstm_mlp
-    elif model_type == "universal":
-        return get_universal
-    else:
-        raise ValueError(f"❌ Unknown model type: '{model_type}'")
+def get_linear_regression(data_config, parameters):
+    batch_size = parameters["batch_size"]
+
+    scaler, data, input_shape = data_pipeline.lstm_pipeline(
+        data_config["load_path"],
+        data_config["lookback"],
+        data_config["horizon"],
+        batch_size,
+        data_config["time_col"],
+        data_config["target_col"],
+        data_config["freq"],
+    )
+
+    model = LinearRegression(
+        input_dim=np.prod(input_shape), output_dim=data_config["horizon"]
+    )
+    model.to(data_config["device"])
+
+    optimizer = get_optimizer(
+        parameters["optimizer"], model.parameters(), parameters["learning_rate"]
+    )
+    criterion = nn.L1Loss()
+
+    return scaler, data, model, optimizer, criterion
 
 
 def find_submodules_by_type(model, target_type, prefix=""):
@@ -310,3 +322,22 @@ def get_model_component_names(model, model_type, component):
         return find_submodules_by_type(model, nn.Conv1d) + ["fc2"]
     else:
         raise ValueError(f"Unknown component '{component}'")
+
+
+def get_model_fn(model_type):
+    if model_type == "cnn_lstm":
+        return get_cnn_lstm
+    elif model_type == "lstm":
+        return get_lstm
+    elif model_type == "di_rnn":
+        return get_di_rnn
+    elif model_type == "cnn_di_rnn":
+        return get_cnn_di_rnn
+    elif model_type == "base_residual":
+        return get_lstm_mlp
+    elif model_type == "universal":
+        return get_universal
+    elif model_type == "linear_regression":
+        return get_linear_regression
+    else:
+        raise ValueError(f"❌ Unknown model type: '{model_type}'")

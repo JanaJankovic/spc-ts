@@ -41,11 +41,16 @@
     "optimizer": ["adam", "adamw", "adagrad", "nadam"]
   },
   "lstm": {
-    "batch_size": [16, 32, 64],
+    "batch_size": [64, 128, 256],
     "neurons": [8, 16, 20, 32, 48, 64],
     "lstm_layers": [1, 2, 3, 4],
     "dropout": [0.1, 0.2, 0.3],
     "learning_rate": [0.01, 0.001, 0.0001, 0.00001],
     "optimizer": ["adam", "adamw", "adagrad", "nadam"]
+  },
+  "linear_regression": {
+    "batch_size": [64, 128, 256],
+    "optimizer": ["adam", "adamw", "adagrad", "nadam"],
+    "learning_rate": [0.01, 0.001, 0.0001, 0.00001]
   }
 }

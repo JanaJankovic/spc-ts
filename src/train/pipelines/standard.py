@@ -66,11 +66,17 @@ def evaluate_model(model, val_loader, criterion, device):
                 end="\r",
             )
 
-    print()  # Newline
+        # Flatten to 1D arrays
+    y_pred_flat = torch.cat(all_preds, dim=0).reshape(-1, 1)
+    y_true_flat = torch.cat(all_targets, dim=0).reshape(-1, 1)
+
+    print()
+    print(f"SHAPES: {y_pred_flat.shape}")
+
     return (
         total_loss / len(val_loader.dataset),
-        torch.cat(all_preds),
-        torch.cat(all_targets),
+        y_pred_flat,
+        y_true_flat,
     )
 
 

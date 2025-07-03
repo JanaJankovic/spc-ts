@@ -92,6 +92,11 @@ def get_parameters(model_name):
         p["kernel_size"] = random.choice(s["kernel_size"])
         p["optimizer"] = random.choice(s["optimizer"])
         p["batch_size"] = random.choice(s["batch_size"])
+
+    elif model_name == "linear_regression":
+        p["batch_size"] = random.choice(s["batch_size"])
+        p["optimizer"] = random.choice(s["optimizer"])
+        p["learning_rate"] = random.choice(s["learning_rate"])
     else:
         raise ValueError(f"⚠️ No sampling logic defined for model '{model_name}'.")
 

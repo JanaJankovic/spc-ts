@@ -197,7 +197,6 @@ def uni_model_pipeline(
         horizon,
         batch,
         SPLIT_RATIO,
-        time_col=time_col,
         target_col=target_col,
         consumer_col="consumer_id",
     )
