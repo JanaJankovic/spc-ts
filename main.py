@@ -7,6 +7,8 @@ from src.models.model import get_model_fn, get_model_component_names
 from src.data.pipeline import cnn_lstm_pipeline
 from src.train.pipelines.standard import evaluate_model
 from src.train.utils import calculate_metrics
+import os
+import subprocess
 import torch.nn as nn
 import pandas as pd
 import torch
@@ -15,8 +17,8 @@ import os
 import time
 import re
 
-EPOCHS = 50
-TRIALS = 25
+EPOCHS = 5
+TRIALS = 1
 
 DATA_DIR = "data/processed"
 
@@ -203,10 +205,20 @@ def tl_per_file():
         tl_model(model, model_name, data_config, params)
 
 
+def git_commit_and_push(message="Automated commit after successful run"):
+    try:
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("✅ Git commit & push completed.")
+    except subprocess.CalledProcessError as e:
+        print("❌ Git operation failed:", e)
+
+
 if __name__ == "__main__":
     log.create_logs_files()
 
-    horizons = [1, 4, 5, 7]
+    horizons = [1, 3, 7]
 
     data_config = {
         "load_path": "",
@@ -232,3 +244,5 @@ if __name__ == "__main__":
 
     # # TL per file
     tl_per_file()
+
+    git_commit_and_push("results: experiments results test")
