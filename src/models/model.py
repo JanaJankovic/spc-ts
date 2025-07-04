@@ -317,9 +317,15 @@ def get_model_component_names(model, model_type, component):
     elif component == "cnn":
         # Find all Conv1d layers dynamically
         return find_submodules_by_type(model, nn.Conv1d)
+    elif component == "lstm":
+        # Find all Conv1d layers dynamically
+        return find_submodules_by_type(model, nn.LSTM)
     elif component == "dense_cnn":
         # Both
         return find_submodules_by_type(model, nn.Conv1d) + ["fc2"]
+    elif component == "dense_lstm":
+        # Find all Conv1d layers dynamically
+        return find_submodules_by_type(model, nn.LSTM) + ["fc2"]
     else:
         raise ValueError(f"Unknown component '{component}'")
 

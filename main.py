@@ -56,21 +56,21 @@ def models_per_file(data_config):
     for file in file_names:
         data_config["load_path"] = os.path.join(DATA_DIR, file)
 
-        train_pipeline.train_model(
-            "linear_regression",
-            model_fn=lambda config, p: model_handler.get_linear_regression(config, p),
-            data_config=data_config,
-            param_sampler=lambda: get_parameters("linear_regression"),
-            trials=TRIALS,
-            epochs=EPOCHS,
-            early_stopping=False,
-        )
+        # train_pipeline.train_model(
+        #     "linear_regression",
+        #     model_fn=lambda config, p: model_handler.get_linear_regression(config, p),
+        #     data_config=data_config,
+        #     param_sampler=lambda: get_parameters("linear_regression"),
+        #     trials=TRIALS,
+        #     epochs=EPOCHS,
+        #     early_stopping=False,
+        # )
 
         train_pipeline.train_model(
-            "lstm",
-            model_fn=lambda config, p: model_handler.get_lstm(config, p),
+            "cnn_lstm",
+            model_fn=lambda config, p: model_handler.get_cnn_lstm(config, p),
             data_config=data_config,
-            param_sampler=lambda: get_parameters("lstm"),
+            param_sampler=lambda: get_parameters("cnn_lstm"),
             trials=TRIALS,
             epochs=EPOCHS,
             early_stopping=False,
@@ -160,37 +160,41 @@ def tl_model(model, model_name, data_config, params):
         for f in os.listdir(DATA_DIR)
         if os.path.isfile(os.path.join(DATA_DIR, f)) and f.startswith("mm")
     ]
-    component = "cnn"
+    components = ["lstm", "dense_lstm"]
 
-    for file_name in file_names:
-        f = os.path.basename(file_name)
-        name_target = os.path.splitext(f)[0]
+    for component in components:
+        for file_name in file_names:
+            f = os.path.basename(file_name)
+            name_target = os.path.splitext(f)[0]
 
-        tl_model_name = f"{model_name[:-3]}_t_{name_target}.pt"
-        pipeline, _ = get_training_pipeline("transfer_learning")
-        data_config["transfer_learning"] = f"Universal to target({name_target})"
-        data_config["load_path"] = os.path.join(DATA_DIR, file_name)
-        model_type = extract_model_type(model_name)
-        model_fn = get_model_fn("cnn_lstm")
-        c_name = get_model_component_names(model, model_type, component)
+            tl_model_name = f"{model_name[:-3]}_t_{name_target}.pt"
+            pipeline, _ = get_training_pipeline("transfer_learning")
+            data_config["transfer_learning"] = f"Universal to target({name_target})"
+            data_config["load_path"] = os.path.join(DATA_DIR, file_name)
+            data_config["transfer_learning_component"] = component
+            model_type = extract_model_type(model_name)
+            model_fn = get_model_fn("cnn_lstm")
+            c_name = get_model_component_names(model, model_type, component)
 
-        pipeline(
-            model=model,
-            model_type="cnn_lstm",
-            model_name=tl_model_name,
-            model_component=name_target,
-            model_fn=model_fn,
-            param_names_to_tune=c_name,
-            data_config=data_config,
-            params=params,
-            epochs=EPOCHS,
-        )
+            pipeline(
+                model=model,
+                model_type="cnn_lstm",
+                model_name=tl_model_name,
+                model_component=name_target,
+                model_fn=model_fn,
+                param_names_to_tune=c_name,
+                data_config=data_config,
+                params=params,
+                epochs=EPOCHS,
+            )
 
 
 def tl_per_file():
     df_trials = pd.read_csv("logs/trial_info.csv")
+    # Filter: contains 'universal', does NOT contain 'mm'
     df_universal = df_trials[
         df_trials["model_name"].str.contains("universal", case=False, na=False)
+        & ~df_trials["model_name"].str.contains("mm", case=False, na=False)
     ]
     model_names = df_universal["model_name"].values
     for model_name in model_names:
@@ -216,7 +220,7 @@ def git_commit_and_push(message="Automated commit after successful run"):
 
 
 if __name__ == "__main__":
-    log.create_logs_files()
+    # log.create_logs_files()
 
     horizons = [1, 3, 7]
 
@@ -238,11 +242,11 @@ if __name__ == "__main__":
         models_per_file(data_config)
 
         # CNN-LSTM train & eval
-        models_once(data_config)
+        # models_once(data_config)
 
-    evaluate_per_file()
+    # evaluate_per_file()
 
-    # # TL per file
+    # # # TL per file
     tl_per_file()
 
-    git_commit_and_push("add: final results")
+    # git_commit_and_push("add: final results")
