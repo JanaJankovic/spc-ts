@@ -17,8 +17,8 @@ import os
 import time
 import re
 
-EPOCHS = 5
-TRIALS = 1
+EPOCHS = 50
+TRIALS = 25
 
 DATA_DIR = "data/processed"
 
@@ -245,4 +245,4 @@ if __name__ == "__main__":
     # # TL per file
     tl_per_file()
 
-    git_commit_and_push("results: experiments results test")
+    git_commit_and_push("add: final results")
