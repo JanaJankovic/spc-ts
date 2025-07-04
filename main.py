@@ -167,11 +167,9 @@ def tl_model(model, model_name, data_config, params):
             f = os.path.basename(file_name)
             name_target = os.path.splitext(f)[0]
 
-            tl_model_name = f"{model_name[:-3]}_t_{name_target}.pt"
+            tl_model_name = f"{model_name[:-3]}_c_{component}_t_{name_target}.pt"
             pipeline, _ = get_training_pipeline("transfer_learning")
-            data_config["transfer_learning"] = f"Universal to target({name_target})"
             data_config["load_path"] = os.path.join(DATA_DIR, file_name)
-            data_config["transfer_learning_component"] = component
             model_type = extract_model_type(model_name)
             model_fn = get_model_fn("cnn_lstm")
             c_name = get_model_component_names(model, model_type, component)
